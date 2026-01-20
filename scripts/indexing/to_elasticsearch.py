@@ -118,11 +118,21 @@ def create_news_index(es: Elasticsearch, index_name: str) -> None:
         "mappings": {
             "properties": {
                 "symbol": {"type": "keyword"},
-                "title": {"type": "text"},
-                "publisher": {"type": "keyword"},
-                "link": {"type": "keyword"},
+                "title": {
+                    "type": "text",
+                    "fields": {"keyword": {"type": "keyword", "ignore_above": 512}}
+                },
+                "summary": {
+                    "type": "text",
+                    "fields": {"keyword": {"type": "keyword", "ignore_above": 1024}}
+                },
+                "provider": {"type": "keyword"},
+                "category": {"type": "keyword"},
+                "url": {"type": "keyword"},
+                "image": {"type": "keyword"},
+                "pub_date": {"type": "date"},
                 "pub_date_utc": {"type": "date"},
-                "news_type": {"type": "keyword"},
+                "fetched_at": {"type": "date"},
                 "fetched_at_utc": {"type": "date"},
             }
         }

@@ -37,8 +37,8 @@ def run_ingest_stocks():
 
 
 def run_ingest_news():
-    """Task: Ingest news data from Yahoo Finance."""
-    from scripts.ingestion.news import main
+    """Task: Ingest news data from Finnhub API."""
+    from scripts.ingestion.finnhub_news import main
     main()
 
 

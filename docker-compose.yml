@@ -14,6 +14,7 @@ services:
       - AIRFLOW__WEBSERVER__SECRET_KEY=supersecretkey123
       - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-arm64
       - ELASTICSEARCH_HOST=elasticsearch
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
@@ -22,13 +23,15 @@ services:
       - ./scripts:/opt/airflow/scripts
       - ./config:/opt/airflow/config
       - ./spark:/opt/airflow/spark
+      - ./kibana:/opt/airflow/kibana
     ports:
       - "8080:8080"
     depends_on:
       - postgres
     command: >
       bash -c "airflow db init &&
-               airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com &&
+               airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true &&
+               (sleep 30 && /opt/airflow/scripts/init_kibana.sh) &
                airflow webserver & airflow scheduler"
     networks:
       - bigdata-network

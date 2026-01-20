@@ -40,6 +40,7 @@ STOCK_SYMBOLS = [
 
 # API Keys
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
 
 # Elasticsearch
 ELASTICSEARCH_HOST = os.getenv("ELASTICSEARCH_HOST", "localhost")
