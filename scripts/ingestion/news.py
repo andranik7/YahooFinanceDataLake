@@ -5,7 +5,7 @@ Fetches news for each stock symbol and saves to the raw layer.
 
 import json
 import sys
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yfinance as yf
@@ -36,7 +36,7 @@ def fetch_news(symbol: str) -> list[dict]:
                 "pub_date": content.get("pubDate", ""),
                 "provider": content.get("provider", {}).get("displayName", ""),
                 "url": content.get("canonicalUrl", {}).get("url", ""),
-                "fetched_at": datetime.now(UTC).isoformat(),
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
             })
 
         return parsed_news
@@ -48,7 +48,7 @@ def fetch_news(symbol: str) -> list[dict]:
 
 def save_to_raw(data: list[dict]) -> Path:
     """Save news data to the raw layer with date partitioning."""
-    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     output_dir = NEWS_RAW / "financial_news" / today
     output_dir.mkdir(parents=True, exist_ok=True)

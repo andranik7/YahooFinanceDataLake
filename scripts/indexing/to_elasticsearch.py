@@ -31,6 +31,10 @@ def get_es_client() -> Elasticsearch:
 
 def create_index(es: Elasticsearch, index_name: str) -> None:
     """Create index with mapping if it doesn't exist."""
+    if es.indices.exists(index=index_name):
+        logger.info(f"Index already exists: {index_name}")
+        return
+
     mapping = {
         "mappings": {
             "properties": {
@@ -53,10 +57,6 @@ def create_index(es: Elasticsearch, index_name: str) -> None:
             }
         }
     }
-
-    if es.indices.exists(index=index_name):
-        es.indices.delete(index=index_name)
-        logger.info(f"Deleted existing index: {index_name}")
 
     es.indices.create(index=index_name, body=mapping)
     logger.info(f"Created index: {index_name}")
@@ -110,6 +110,10 @@ def index_stocks(es: Elasticsearch) -> None:
 
 def create_news_index(es: Elasticsearch, index_name: str) -> None:
     """Create news index with mapping if it doesn't exist."""
+    if es.indices.exists(index=index_name):
+        logger.info(f"Index already exists: {index_name}")
+        return
+
     mapping = {
         "mappings": {
             "properties": {
@@ -123,10 +127,6 @@ def create_news_index(es: Elasticsearch, index_name: str) -> None:
             }
         }
     }
-
-    if es.indices.exists(index=index_name):
-        es.indices.delete(index=index_name)
-        logger.info(f"Deleted existing index: {index_name}")
 
     es.indices.create(index=index_name, body=mapping)
     logger.info(f"Created index: {index_name}")

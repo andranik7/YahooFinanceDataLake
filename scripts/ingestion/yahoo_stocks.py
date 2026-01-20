@@ -4,7 +4,7 @@ Fetches stock prices and saves them to the raw layer of the data lake.
 """
 
 import json
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yfinance as yf
@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.settings import STOCK_SYMBOLS, YAHOO_FINANCE_RAW
 
 
-def fetch_stock_data(symbol: str, period: str = "1mo") -> list[dict]:
+def fetch_stock_data(symbol: str, period: str = "1y") -> list[dict]:
     """Fetch stock data history for a given symbol."""
     try:
         ticker = yf.Ticker(symbol)
@@ -35,7 +35,7 @@ def fetch_stock_data(symbol: str, period: str = "1mo") -> list[dict]:
                 "low": float(row["Low"]),
                 "close": float(row["Close"]),
                 "volume": int(row["Volume"]),
-                "fetched_at": datetime.now(UTC).isoformat(),
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
             })
 
         return records
@@ -58,7 +58,7 @@ def fetch_company_info(symbol: str) -> dict | None:
             "country": info.get("country", ""),
             "market_cap": info.get("marketCap", 0),
             "currency": info.get("currency", "USD"),
-            "fetched_at": datetime.now(UTC).isoformat(),
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as e:
         logger.error(f"Error fetching info for {symbol}: {e}")
@@ -67,7 +67,7 @@ def fetch_company_info(symbol: str) -> dict | None:
 
 def save_to_raw(data: list[dict], data_type: str) -> Path:
     """Save data to the raw layer with date partitioning."""
-    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     output_dir = YAHOO_FINANCE_RAW / data_type / today
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -85,10 +85,10 @@ def main():
     """Main ingestion function."""
     logger.info(f"Starting Yahoo Finance ingestion for {len(STOCK_SYMBOLS)} symbols")
 
-    # Fetch stock prices (6 months history)
+    # Fetch stock prices (12 months history)
     stocks_data = []
     for symbol in STOCK_SYMBOLS:
-        records = fetch_stock_data(symbol, period="6mo")
+        records = fetch_stock_data(symbol, period="1y")
         stocks_data.extend(records)
         if records:
             logger.info(f"Fetched {symbol}: {len(records)} days")

@@ -28,8 +28,8 @@ Ce projet implémente un Data Lake pour l'analyse boursière avec :
 ## Prérequis
 
 - Docker & Docker Compose
-- Python 3.13+
-- Poetry
+- Python 3.10+
+- Poetry (optionnel, pour exécution locale)
 
 ## Structure du projet
 
@@ -51,20 +51,25 @@ YahooFinance/
 │   ├── combination/        # Jointure des sources
 │   └── indexing/           # Indexation Elasticsearch
 ├── airflow/dags/           # Orchestration du pipeline
+│   └── yahoo_finance_pipeline.py
 ├── docs/
 │   └── rapport.tex         # Documentation LaTeX
-└── docker-compose.yml
+├── docker-compose.yml
+└── Dockerfile.airflow      # Image Airflow avec Java/Spark
 ```
 
 ## Stack technique
 
 | Composant | Technologie | Version |
 |-----------|-------------|---------|
-| Orchestration | Apache Airflow | 2.7 |
-| Transformation | Apache Spark | 3.5 |
-| Indexation | Elasticsearch | 8.11 |
-| Visualisation | Kibana | 8.11 |
+| Orchestration | Apache Airflow | 2.7.3 |
+| Transformation | Apache Spark | 3.5.0 |
+| Indexation | Elasticsearch | 8.11.0 |
+| Visualisation | Kibana | 8.11.0 |
 | Base métadonnées | PostgreSQL | 15 |
+| Runtime Java | OpenJDK | 11 |
+
+> Airflow utilise une image Docker custom (`Dockerfile.airflow`) avec Java et PySpark pour soumettre les jobs Spark via `SparkSubmitOperator`.
 
 ## Installation
 
@@ -73,15 +78,23 @@ YahooFinance/
 git clone <repository>
 cd YahooFinance
 
-# 2. Installer les dépendances Python
-poetry install
+# 2. Construire l'image Airflow (avec Java pour Spark)
+docker-compose build
 
 # 3. Démarrer les services Docker
 docker-compose up -d
 
 # 4. Vérifier que les services sont up
 docker-compose ps
+
+# 5. Configurer la connexion Spark dans Airflow
+docker-compose exec airflow airflow connections add spark_default \
+    --conn-type spark \
+    --conn-host spark://spark-master \
+    --conn-port 7077
 ```
+
+> **Note** : L'installation locale via Poetry (`poetry install`) est optionnelle, pour le développement uniquement.
 
 ## Services
 
@@ -92,13 +105,40 @@ docker-compose ps
 | Elasticsearch | http://localhost:9200 | - |
 | Kibana | http://localhost:5601 | - |
 
-## Pipeline de données
+## Orchestration Airflow
 
-Exécuter les étapes dans l'ordre :
+Le pipeline est orchestré via un DAG Airflow qui enchaîne automatiquement toutes les étapes.
+
+### DAG : `yahoo_finance_pipeline`
+
+```
+start → [ingest_stocks, ingest_news] → format_data → combine_data → index_data → end
+              (parallèle)                (Spark)       (Spark)
+```
+
+| Task | Opérateur | Description |
+|------|-----------|-------------|
+| ingest_stocks | PythonOperator | Collecte cours + infos entreprises |
+| ingest_news | PythonOperator | Collecte actualités |
+| format_data | SparkSubmitOperator | Conversion JSON → Parquet |
+| combine_data | SparkSubmitOperator | Jointure + métriques |
+| index_data | PythonOperator | Indexation Elasticsearch |
+
+### Exécution
+
+1. Accéder à Airflow : http://localhost:8080 (admin/admin)
+2. Activer le DAG `yahoo_finance_pipeline`
+3. Déclencher manuellement avec "Trigger DAG" ou attendre l'exécution planifiée (@daily)
+
+> **Indexation incrémentale** : Le pipeline ajoute les nouvelles données sans supprimer l'historique. Les documents sont mis à jour via leur identifiant unique (`symbol_date` pour les stocks, `uuid` pour les news).
+
+## Pipeline manuel (optionnel)
+
+Pour exécuter les étapes individuellement en local :
 
 ```bash
 # 1. Ingestion (collecte des données Yahoo Finance)
-poetry run ingest-stocks    # Stocks + Company Info (6 mois d'historique)
+poetry run ingest-stocks    # Stocks + Company Info (12 mois d'historique)
 poetry run ingest-news      # Actualités financières
 
 # 2. Transformation (JSON → Parquet avec Spark)
@@ -168,7 +208,7 @@ poetry run index-data
 3. Horizontal axis : `date`
 4. Vertical axis : `Average of close`
 5. Filter : `symbol: AAPL`
-6. Time range : Last 6 months
+6. Time range : Last 12 months
 
 ## Arrêt
 

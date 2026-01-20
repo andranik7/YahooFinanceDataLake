@@ -127,11 +127,12 @@ Usage & Parquet & Données enrichies, jointures effectuées \\
 \toprule
 \textbf{Composant} & \textbf{Technologie} & \textbf{Rôle} \\
 \midrule
-Orchestration & Apache Airflow 2.7 & Planification et exécution des tâches \\
-Transformation & Apache Spark 3.5 & Traitement distribué des données \\
-Indexation & Elasticsearch 8.11 & Moteur de recherche et analytics \\
-Visualisation & Kibana 8.11 & Dashboards interactifs \\
+Orchestration & Apache Airflow 2.7.3 & Planification et exécution des tâches \\
+Transformation & Apache Spark 3.5.0 & Traitement distribué des données \\
+Indexation & Elasticsearch 8.11.0 & Moteur de recherche et analytics \\
+Visualisation & Kibana 8.11.0 & Dashboards interactifs \\
 Base métadonnées & PostgreSQL 15 & Backend Airflow \\
+Runtime Java & OpenJDK 11 & Requis pour Spark dans Airflow \\
 Conteneurisation & Docker Compose & Déploiement des services \\
 \bottomrule
 \end{tabular}
@@ -147,7 +148,8 @@ Conteneurisation & Docker Compose & Déploiement des services \\
 \begin{lstlisting}[language=bash, caption=Arborescence du projet]
 YahooFinance/
 ├── airflow/
-│   └── dags/              # DAGs Airflow
+│   └── dags/
+│       └── yahoo_finance_pipeline.py  # DAG principal
 ├── config/
 │   └── settings.py        # Configuration centralisee
 ├── data/
@@ -160,6 +162,7 @@ YahooFinance/
 │   ├── combination/       # Jointure des sources
 │   └── indexing/          # Indexation Elasticsearch
 ├── docker-compose.yml
+├── Dockerfile.airflow     # Image Airflow avec Java/Spark
 ├── pyproject.toml
 └── README.md
 \end{lstlisting}
@@ -174,7 +177,7 @@ L'ingestion collecte les données depuis Yahoo Finance via la bibliothèque \tex
 
 \textbf{Données collectées :}
 \begin{itemize}
-    \item \textbf{Stocks} : historique 6 mois (Open, High, Low, Close, Volume)
+    \item \textbf{Stocks} : historique 12 mois (Open, High, Low, Close, Volume)
     \item \textbf{Company Info} : nom, secteur, industrie, capitalisation
     \item \textbf{News} : titre, éditeur, date de publication, lien
 \end{itemize}
@@ -182,7 +185,7 @@ L'ingestion collecte les données depuis Yahoo Finance via la bibliothèque \tex
 \textbf{Symboles suivis :} AAPL, GOOGL, MSFT, AMZN, META, TSLA, NVDA, JPM, V, WMT
 
 \begin{lstlisting}[language=Python, caption=Extrait ingestion stocks]
-def fetch_stock_data(symbol: str, period: str = "6mo") -> list[dict]:
+def fetch_stock_data(symbol: str, period: str = "1y") -> list[dict]:
     ticker = yf.Ticker(symbol)
     hist = ticker.history(period=period)
 
@@ -196,7 +199,7 @@ def fetch_stock_data(symbol: str, period: str = "6mo") -> list[dict]:
             "low": float(row["Low"]),
             "close": float(row["Close"]),
             "volume": int(row["Volume"]),
-            "fetched_at": datetime.now(UTC).isoformat(),
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
         })
     return records
 \end{lstlisting}
@@ -286,8 +289,8 @@ mapping = {
 
 \begin{itemize}
     \item Docker et Docker Compose
-    \item Python 3.13+
-    \item Poetry (gestionnaire de dépendances)
+    \item Python 3.10+ (optionnel, pour développement local)
+    \item Poetry (optionnel, gestionnaire de dépendances)
 \end{itemize}
 
 \subsection{Installation}
@@ -297,12 +300,18 @@ mapping = {
 git clone <repository>
 cd YahooFinance
 
-# Installer les dependances Python
-poetry install
+# Construire l'image Airflow (avec Java pour Spark)
+docker-compose build
 
 # Demarrer les services Docker
 docker-compose up -d
+
+# Configurer la connexion Spark dans Airflow
+docker-compose exec airflow airflow connections add spark_default \
+    --conn-type spark --conn-host spark://spark-master --conn-port 7077
 \end{lstlisting}
+
+\textbf{Note :} L'image Airflow custom (\texttt{Dockerfile.airflow}) inclut Java 11 et PySpark pour permettre la soumission de jobs Spark via \texttt{SparkSubmitOperator}.
 
 \subsection{Services exposés}
 
@@ -321,7 +330,60 @@ Kibana & \url{http://localhost:5601} & 5601 & - \\
 \caption{Services et URLs}
 \end{table}
 
-\subsection{Exécution du pipeline}
+\subsection{Orchestration Airflow}
+
+Le pipeline est orchestré via un DAG Airflow qui enchaîne automatiquement toutes les étapes.
+
+\subsubsection{DAG : yahoo\_finance\_pipeline}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{
+\centering
+\texttt{start} $\rightarrow$ \texttt{[ingest\_stocks, ingest\_news]} $\rightarrow$ \texttt{format\_data} $\rightarrow$ \texttt{combine\_data} $\rightarrow$ \texttt{index\_data} $\rightarrow$ \texttt{end}
+}}
+\caption{Flux du DAG Airflow}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Task} & \textbf{Opérateur} & \textbf{Description} \\
+\midrule
+ingest\_stocks & PythonOperator & Collecte cours + infos entreprises \\
+ingest\_news & PythonOperator & Collecte actualités financières \\
+format\_data & SparkSubmitOperator & Conversion JSON → Parquet \\
+combine\_data & SparkSubmitOperator & Jointure + métriques dérivées \\
+index\_data & PythonOperator & Indexation Elasticsearch \\
+\bottomrule
+\end{tabular}
+\caption{Tasks du DAG}
+\end{table}
+
+\begin{lstlisting}[language=Python, caption=Configuration SparkSubmitOperator]
+format_data = SparkSubmitOperator(
+    task_id="format_data",
+    application="/opt/airflow/scripts/formatting/format_to_parquet.py",
+    conn_id="spark_default",
+    deploy_mode="client",
+    verbose=True,
+    conf={"spark.master": "spark://spark-master:7077"},
+)
+\end{lstlisting}
+
+\textbf{Exécution :}
+\begin{enumerate}
+    \item Accéder à Airflow : \url{http://localhost:8080} (admin/admin)
+    \item Activer le DAG \texttt{yahoo\_finance\_pipeline}
+    \item Déclencher manuellement avec "Trigger DAG" ou attendre l'exécution planifiée (@daily)
+\end{enumerate}
+
+\textbf{Indexation incrémentale :} Le pipeline ajoute les nouvelles données sans supprimer l'historique existant. Les documents sont mis à jour via leur identifiant unique (\texttt{symbol\_date} pour les stocks, \texttt{uuid} pour les news).
+
+\subsection{Exécution manuelle (optionnel)}
+
+Pour exécuter les étapes individuellement en local :
 
 \begin{lstlisting}[language=bash, caption=Execution manuelle du pipeline]
 # 1. Ingestion des donnees Yahoo Finance
@@ -352,10 +414,10 @@ poetry run index-data
 \toprule
 \textbf{Dataset} & \textbf{Records} & \textbf{Période} & \textbf{Granularité} \\
 \midrule
-Stock prices & 1 280 & 6 mois & Journalière \\
+Stock prices & 1 280 & 12 mois & Journalière \\
 Company info & 10 & - & Par symbole \\
 News & 83 & Variable & Par article \\
-Enriched stocks & 1 280 & 6 mois & Journalière \\
+Enriched stocks & 1 280 & 12 mois & Journalière \\
 \bottomrule
 \end{tabular}
 \caption{Volumétrie des données}
@@ -454,11 +516,11 @@ Pour visualiser les données dans Kibana :
 % ============================================
 
 \begin{itemize}
-    \item Ajout d'un DAG Airflow pour l'orchestration automatique
-    \item Intégration de sources de données supplémentaires
-    \item Alertes sur les variations de cours
+    \item Intégration de sources de données supplémentaires (Reuters, Bloomberg)
+    \item Alertes sur les variations de cours importantes
     \item Machine Learning pour la prédiction de tendances
-    \item Partitionnement des données par date dans le Data Lake
+    \item Analyse de sentiment sur les news
+    \item Scaling horizontal du cluster Spark
 \end{itemize}
 
 % ============================================
@@ -471,6 +533,7 @@ Les principales réalisations sont :
 \begin{itemize}
     \item Data Lake structuré en 3 couches (raw, formatted, usage)
     \item Pipeline ETL complet avec transformations Spark
+    \item Orchestration automatisée via DAG Airflow avec SparkSubmitOperator
     \item Indexation et visualisation via Elasticsearch/Kibana
     \item Conteneurisation complète avec Docker Compose
 \end{itemize}

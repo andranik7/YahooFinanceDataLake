@@ -3,14 +3,17 @@ services:
   # AIRFLOW (Orchestration)
   # ============================================
   airflow:
-    image: apache/airflow:2.7.3-python3.10
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
       - AIRFLOW__CORE__FERNET_KEY=AEf0WxrZ2NVRYRVkkgkk4mONGv8rogecP239_JSmb0U=
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__WEBSERVER__SECRET_KEY=supersecretkey123
-      - _PIP_ADDITIONAL_REQUIREMENTS=yfinance pandas pyarrow pyspark requests elasticsearch
+      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-arm64
+      - ELASTICSEARCH_HOST=elasticsearch
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
@@ -58,8 +61,9 @@ services:
       - "7077:7077"
       - "8081:8080"
     volumes:
-      - ./data:/opt/spark/data
-      - ./spark:/opt/spark/jobs
+      - ./data:/opt/spark/work/data
+      - ./scripts:/opt/spark/work/scripts
+      - ./config:/opt/spark/work/config
     networks:
       - bigdata-network
 
@@ -72,8 +76,9 @@ services:
     depends_on:
       - spark-master
     volumes:
-      - ./data:/opt/spark/data
-      - ./spark:/opt/spark/jobs
+      - ./data:/opt/spark/work/data
+      - ./scripts:/opt/spark/work/scripts
+      - ./config:/opt/spark/work/config
     networks:
       - bigdata-network
 
