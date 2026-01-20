@@ -6,23 +6,28 @@ Projet Big Data : architecture complète de collecte, transformation et visualis
 
 Ce projet implémente un Data Lake pour l'analyse boursière avec :
 - Ingestion de données Yahoo Finance (cours, volumes, infos entreprises)
-- Collecte d'actualités financières
+- Collecte d'actualités financières via **Finnhub API** (12 mois d'historique)
+- **Analyse de sentiment** automatique avec VADER
 - Transformation et enrichissement avec Apache Spark
 - Indexation dans Elasticsearch
-- Visualisation via dashboards Kibana
+- Visualisation via dashboards Kibana (avec import automatique)
 
 **Symboles suivis** : AAPL, GOOGL, MSFT, AMZN, META, TSLA, NVDA, JPM, V, WMT
 
 ## Architecture
 
 ```
-┌─────────────────┐     ┌─────────┐     ┌─────────────┐     ┌─────────┐     ┌───────────────┐
-│  Yahoo Finance  │────►│   RAW   │────►│  FORMATTED  │────►│  USAGE  │────►│ Elasticsearch │
-│  (yfinance)     │     │  (JSON) │     │  (Parquet)  │     │(Parquet)│     │    Kibana     │
-└─────────────────┘     └─────────┘     └─────────────┘     └─────────┘     └───────────────┘
-                              │               │                  │
-                         Partitionné     Normalisé UTC      Jointures
-                         par date        Types validés      Métriques
+┌─────────────────┐
+│  Yahoo Finance  │──┐
+│  (yfinance)     │  │
+└─────────────────┘  │     ┌─────────┐     ┌─────────────┐     ┌─────────┐     ┌───────────────┐
+                     ├────►│   RAW   │────►│  FORMATTED  │────►│  USAGE  │────►│ Elasticsearch │
+┌─────────────────┐  │     │  (JSON) │     │  (Parquet)  │     │(Parquet)│     │    Kibana     │
+│  Finnhub API    │──┘     └─────────┘     └─────────────┘     └─────────┘     └───────────────┘
+│  (news + VADER) │              │               │                  │
+└─────────────────┘         Partitionné     Normalisé UTC      Jointures
+                            par date        Types validés      Métriques
+                                            + Sentiment
 ```
 
 ## Prérequis
@@ -46,10 +51,13 @@ YahooFinance/
 ├── scripts/
 │   ├── ingestion/          # Collecte des données
 │   │   ├── yahoo_stocks.py # Stocks + Company Info
-│   │   └── news.py         # Actualités
+│   │   └── finnhub_news.py # Actualités Finnhub + sentiment VADER
 │   ├── formatting/         # Transformation Spark
 │   ├── combination/        # Jointure des sources
-│   └── indexing/           # Indexation Elasticsearch
+│   ├── indexing/           # Indexation Elasticsearch
+│   └── init_kibana.sh      # Import auto des dashboards
+├── kibana/
+│   └── kibana_saved_objects.ndjson  # Dashboards exportés
 ├── airflow/dags/           # Orchestration du pipeline
 │   └── yahoo_finance_pipeline.py
 ├── docs/
@@ -68,6 +76,8 @@ YahooFinance/
 | Visualisation | Kibana | 8.11.0 |
 | Base métadonnées | PostgreSQL | 15 |
 | Runtime Java | OpenJDK | 11 |
+| Analyse sentiment | VADER | 3.3.2 |
+| API News | Finnhub | - |
 
 > Airflow utilise une image Docker custom (`Dockerfile.airflow`) avec Java et PySpark pour soumettre les jobs Spark via `SparkSubmitOperator`.
 
@@ -78,21 +88,28 @@ YahooFinance/
 git clone <repository>
 cd YahooFinance
 
-# 2. Construire l'image Airflow (avec Java pour Spark)
+# 2. Configurer la clé API Finnhub
+cp .env.example .env
+# Éditer .env et ajouter votre clé Finnhub (gratuite sur https://finnhub.io/)
+# FINNHUB_API_KEY=votre_cle_ici
+
+# 3. Construire l'image Airflow (avec Java pour Spark)
 docker-compose build
 
-# 3. Démarrer les services Docker
+# 4. Démarrer les services Docker
 docker-compose up -d
 
-# 4. Vérifier que les services sont up
+# 5. Vérifier que les services sont up
 docker-compose ps
 
-# 5. Configurer la connexion Spark dans Airflow
+# 6. Configurer la connexion Spark dans Airflow
 docker-compose exec airflow airflow connections add spark_default \
     --conn-type spark \
     --conn-host spark://spark-master \
     --conn-port 7077
 ```
+
+> **Note** : Les dashboards Kibana sont automatiquement importés au démarrage via `init_kibana.sh`.
 
 > **Note** : L'installation locale via Poetry (`poetry install`) est optionnelle, pour le développement uniquement.
 
@@ -178,9 +195,13 @@ poetry run index-data
 |-------|------|-------------|
 | symbol | keyword | Symbole associé |
 | title | text | Titre de l'article |
-| publisher | keyword | Éditeur |
+| summary | text | Résumé de l'article |
+| provider | keyword | Éditeur (Yahoo, Reuters, etc.) |
+| category | keyword | Catégorie (company, market, etc.) |
 | pub_date_utc | date | Date de publication |
-| link | keyword | URL de l'article |
+| url | keyword | URL de l'article |
+| **sentiment_score** | float | Score de sentiment (-1.0 à 1.0) |
+| **sentiment_label** | keyword | Label (positive, negative, neutral) |
 
 ## Visualisation Kibana
 
@@ -209,6 +230,45 @@ poetry run index-data
 4. Vertical axis : `Average of close`
 5. Filter : `symbol: AAPL`
 6. Time range : Last 12 months
+
+### Exemple : Tableau des dernières news avec sentiment
+
+1. Discover → Data view : `stock_news`
+2. Ajouter colonnes : `symbol`, `title`, `summary`, `sentiment_label`, `sentiment_score`, `pub_date_utc`
+3. Trier par `pub_date_utc` décroissant
+4. Save et ajouter au dashboard
+
+### Export/Import des dashboards
+
+Les dashboards sont sauvegardés dans `kibana/kibana_saved_objects.ndjson` et importés automatiquement au démarrage.
+
+Pour exporter vos modifications :
+```bash
+docker compose exec airflow curl -s -X POST "http://kibana:5601/api/saved_objects/_export" \
+  -H "kbn-xsrf: true" \
+  -H "Content-Type: application/json" \
+  -d '{"type": ["dashboard", "visualization", "lens", "index-pattern", "search"], "includeReferencesDeep": true}' \
+  -o /opt/airflow/kibana/kibana_saved_objects.ndjson
+```
+
+## Analyse de sentiment
+
+Le projet utilise **VADER** (Valence Aware Dictionary and sEntiment Reasoner) pour analyser automatiquement le sentiment des actualités financières.
+
+### Comment ça fonctionne
+
+1. Lors de l'ingestion, chaque article (title + summary) est analysé
+2. VADER retourne un score `compound` entre -1.0 et 1.0
+3. Le score est classifié en label :
+   - `positive` : score >= 0.05
+   - `negative` : score <= -0.05
+   - `neutral` : entre -0.05 et 0.05
+
+### Exemples d'utilisation dans Kibana
+
+- Filtrer les news négatives : `sentiment_label: "negative"`
+- Visualiser la distribution des sentiments par symbole
+- Créer des alertes sur les news très négatives (score < -0.5)
 
 ## Arrêt
 
