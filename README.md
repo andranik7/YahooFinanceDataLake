@@ -5,7 +5,7 @@ Projet Big Data : architecture complète de collecte, transformation et visualis
 ## Description
 
 Ce projet implémente un Data Lake pour l'analyse boursière avec :
-- Ingestion de données Yahoo Finance (cours, volumes, infos entreprises)
+- Ingestion de données Yahoo Finance (cours, volumes, infos entreprises) - **5 ans d'historique**
 - Collecte d'actualités financières via **Finnhub API** (12 mois d'historique)
 - **Analyse de sentiment** automatique avec VADER
 - Transformation et enrichissement avec Apache Spark
@@ -135,7 +135,7 @@ start → [ingest_stocks, ingest_news] → format_data → combine_data → inde
 
 | Task | Opérateur | Description |
 |------|-----------|-------------|
-| ingest_stocks | PythonOperator | Collecte cours + infos entreprises (~30 sec) |
+| ingest_stocks | PythonOperator | Collecte cours + infos entreprises (5 ans d'historique) |
 | ingest_news | PythonOperator | Collecte 12 mois de news via Finnhub (~3 min, 120 appels API) |
 | format_data | SparkSubmitOperator | Conversion JSON → Parquet |
 | combine_data | SparkSubmitOperator | Jointure + métriques |
@@ -280,27 +280,6 @@ Le projet utilise **VADER** (Valence Aware Dictionary and sEntiment Reasoner) po
    - `positive` : score >= 0.05
    - `negative` : score <= -0.05
    - `neutral` : entre -0.05 et 0.05
-
-### Exemples d'utilisation dans Kibana
-
-- Filtrer les news négatives : `sentiment_label: "negative"`
-- Visualiser la distribution des sentiments par symbole
-- Créer des alertes sur les news très négatives (score < -0.5)
-
-### Exemple : Graphique sentiment sous le graphique de prix
-
-Pour visualiser l'impact du sentiment sur les prix :
-
-1. **Graphique 1 (prix)** : Line chart sur `stock_analysis`
-   - X: `date`, Y: `close`
-
-2. **Graphique 2 (sentiment)** : Bar chart sur `stock_news`
-   - X: `pub_date_utc` (interval: 1 day)
-   - Y: Count of records
-   - Breakdown: `sentiment_label`
-
-3. Placer les deux graphiques dans le même dashboard, l'un sous l'autre
-4. Ils partagent le même time range → les corrélations sont visibles
 
 ## Arrêt
 

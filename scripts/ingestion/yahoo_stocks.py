@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.settings import STOCK_SYMBOLS, YAHOO_FINANCE_RAW
 
 
-def fetch_stock_data(symbol: str, period: str = "1y") -> list[dict]:
+def fetch_stock_data(symbol: str, period: str = "5y") -> list[dict]:
     """Fetch stock data history for a given symbol."""
     try:
         ticker = yf.Ticker(symbol)
@@ -85,10 +85,10 @@ def main():
     """Main ingestion function."""
     logger.info(f"Starting Yahoo Finance ingestion for {len(STOCK_SYMBOLS)} symbols")
 
-    # Fetch stock prices (12 months history)
+    # Fetch stock prices (5 years history)
     stocks_data = []
     for symbol in STOCK_SYMBOLS:
-        records = fetch_stock_data(symbol, period="1y")
+        records = fetch_stock_data(symbol, period="5y")
         stocks_data.extend(records)
         if records:
             logger.info(f"Fetched {symbol}: {len(records)} days")
