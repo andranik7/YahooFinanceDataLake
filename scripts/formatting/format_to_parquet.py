@@ -123,11 +123,15 @@ def format_news(spark: SparkSession) -> None:
         .withColumn("fetched_at_utc", to_utc_timestamp(col("fetched_at"), "UTC"))
     )
 
+    # Filter out invalid dates (keep only dates from 2020 onwards)
+    df_normalized = df_normalized.filter(col("pub_date_utc") >= "2020-01-01")
+    logger.info(f"Filtered to {df_normalized.count()} news with valid dates (>= 2020)")
+
     output_path = NEWS_FORMATTED / "financial_news"
     output_path.mkdir(parents=True, exist_ok=True)
 
     df_normalized.write.mode("overwrite").parquet(str(output_path / "news.parquet"))
-    logger.info(f"Saved {df_normalized.count()} news records to {output_path}")
+    logger.info(f"Saved news records to {output_path}")
 
 
 def main():

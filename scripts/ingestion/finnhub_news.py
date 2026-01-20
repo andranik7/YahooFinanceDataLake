@@ -136,6 +136,28 @@ def save_to_raw(data: list[dict]) -> Path:
     return output_file
 
 
+def generate_month_ranges(months_back: int = 12) -> list[tuple[str, str]]:
+    """
+    Generate list of (from_date, to_date) tuples for each month.
+    Fetching month by month avoids API result limits.
+    """
+    ranges = []
+    now = datetime.now(timezone.utc)
+    current = now
+
+    for _ in range(months_back):
+        month_end = current
+        month_start = current.replace(day=1)
+        ranges.append((
+            month_start.strftime("%Y-%m-%d"),
+            month_end.strftime("%Y-%m-%d")
+        ))
+        # Go to previous month
+        current = month_start - timedelta(days=1)
+
+    return ranges
+
+
 def main():
     """Main ingestion function for Finnhub news."""
     logger.info(f"Starting Finnhub news ingestion for {len(STOCK_SYMBOLS)} symbols")
@@ -144,27 +166,37 @@ def main():
         logger.error("FINNHUB_API_KEY not set. Aborting.")
         return
 
-    # Fetch news for the last 12 months
-    to_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    from_date = (datetime.now(timezone.utc) - timedelta(days=365)).strftime("%Y-%m-%d")
-
-    logger.info(f"Fetching news from {from_date} to {to_date}")
+    # Generate month-by-month date ranges (12 months)
+    month_ranges = generate_month_ranges(12)
+    total_calls = len(STOCK_SYMBOLS) * len(month_ranges)
+    logger.info(f"Will make {total_calls} API calls (~{total_calls // 60 + 1} minutes)")
 
     all_news = []
     seen_ids = set()
+    call_count = 0
 
     for symbol in STOCK_SYMBOLS:
-        news = fetch_news(symbol, from_date, to_date)
-        for article in news:
-            # Deduplicate by news ID (same article can appear for multiple symbols)
-            if article["id"] not in seen_ids:
-                seen_ids.add(article["id"])
-                all_news.append(article)
+        symbol_count = 0
 
-        logger.info(f"Fetched {len(news)} news for {symbol}")
+        for from_date, to_date in month_ranges:
+            news = fetch_news(symbol, from_date, to_date)
 
-        # Rate limiting: Finnhub allows 60 calls/min on free tier
-        time.sleep(1)
+            for article in news:
+                if article["id"] not in seen_ids:
+                    seen_ids.add(article["id"])
+                    all_news.append(article)
+                    symbol_count += 1
+
+            call_count += 1
+
+            # Rate limiting: 60 calls/min = 1 call/second
+            time.sleep(1.1)
+
+            # Log progress every 10 calls
+            if call_count % 10 == 0:
+                logger.info(f"Progress: {call_count}/{total_calls} calls")
+
+        logger.info(f"Fetched {symbol_count} unique news for {symbol}")
 
     if all_news:
         save_to_raw(all_news)
