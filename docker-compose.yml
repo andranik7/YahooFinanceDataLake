@@ -1,0 +1,116 @@
+services:
+  # ============================================
+  # AIRFLOW (Orchestration)
+  # ============================================
+  airflow:
+    image: apache/airflow:2.7.3-python3.10
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=AEf0WxrZ2NVRYRVkkgkk4mONGv8rogecP239_JSmb0U=
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__SECRET_KEY=supersecretkey123
+      - _PIP_ADDITIONAL_REQUIREMENTS=yfinance pandas pyarrow pyspark requests elasticsearch
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./data:/opt/airflow/data
+      - ./scripts:/opt/airflow/scripts
+      - ./config:/opt/airflow/config
+      - ./spark:/opt/airflow/spark
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    command: >
+      bash -c "airflow db init &&
+               airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com &&
+               airflow webserver & airflow scheduler"
+    networks:
+      - bigdata-network
+
+  # ============================================
+  # POSTGRESQL (Airflow metadata)
+  # ============================================
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - bigdata-network
+
+  # ============================================
+  # SPARK (Processing)
+  # ============================================
+  spark-master:
+    image: apache/spark:3.5.0
+    environment:
+      - SPARK_MODE=master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    ports:
+      - "7077:7077"
+      - "8081:8080"
+    volumes:
+      - ./data:/opt/spark/data
+      - ./spark:/opt/spark/jobs
+    networks:
+      - bigdata-network
+
+  spark-worker:
+    image: apache/spark:3.5.0
+    environment:
+      - SPARK_MASTER=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2g
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    depends_on:
+      - spark-master
+    volumes:
+      - ./data:/opt/spark/data
+      - ./spark:/opt/spark/jobs
+    networks:
+      - bigdata-network
+
+  # ============================================
+  # ELASTICSEARCH (Indexing)
+  # ============================================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - bigdata-network
+
+  # ============================================
+  # KIBANA (Dashboard)
+  # ============================================
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - bigdata-network
+
+networks:
+  bigdata-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  elasticsearch-data:

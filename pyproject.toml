@@ -1,0 +1,54 @@
+[tool.poetry]
+name = "yahoo-finance-datalake"
+version = "0.1.0"
+description = "Big Data Project - Yahoo Finance Data Lake with Airflow, Spark, and Elasticsearch"
+authors = ["Student"]
+readme = "README.md"
+packages = [{include = "scripts"}]
+
+[tool.poetry.dependencies]
+python = "^3.13"
+
+# Data Ingestion
+yfinance = "^0.2.40"
+requests = "^2.32.0"
+beautifulsoup4 = "^4.12.0"
+
+# Data Processing
+pandas = "^2.2.0"
+pyarrow = ">=17.0.0"
+pyspark = "^3.5.0"
+
+# Indexing & Search
+elasticsearch = "^8.15.0"
+
+# Utilities
+python-dotenv = "^1.0.0"
+loguru = "^0.7.0"
+
+[tool.poetry.group.dev.dependencies]
+jupyter = "^1.0.0"
+matplotlib = "^3.9.0"
+seaborn = "^0.13.0"
+pytest = "^8.0.0"
+black = "^24.0.0"
+ruff = "^0.5.0"
+
+[tool.poetry.scripts]
+ingest-stocks = "scripts.ingestion.yahoo_stocks:main"
+ingest-news = "scripts.ingestion.news:main"
+format-data = "scripts.formatting.format_to_parquet:main"
+combine-data = "scripts.combination.combine_sources:main"
+index-data = "scripts.indexing.to_elasticsearch:main"
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

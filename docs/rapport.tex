@@ -1,0 +1,478 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{booktabs}
+\usepackage{float}
+
+\geometry{margin=2.5cm}
+
+% Code styling
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Projet Big Data}
+\lhead{Yahoo Finance Data Lake}
+\rfoot{Page \thepage}
+
+\title{
+    \vspace{-1cm}
+    \textbf{Projet Big Data} \\
+    \large Yahoo Finance Data Lake \\
+    \vspace{0.5cm}
+    \normalsize Architecture de données pour l'analyse boursière
+}
+\author{Étudiant}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+% ============================================
+\section{Introduction}
+% ============================================
+
+Ce projet implémente une architecture Big Data complète pour l'analyse de données boursières. L'objectif est de collecter, transformer et exposer des données financières provenant de Yahoo Finance, en suivant les bonnes pratiques d'ingénierie des données.
+
+\subsection{Objectifs}
+\begin{itemize}
+    \item Ingérer des données boursières et des actualités financières
+    \item Structurer les données dans un Data Lake en couches
+    \item Transformer et enrichir les données avec Apache Spark
+    \item Indexer les données dans Elasticsearch pour la recherche
+    \item Visualiser les données via des dashboards Kibana
+    \item Orchestrer le pipeline avec Apache Airflow
+\end{itemize}
+
+\subsection{Sources de données}
+\begin{enumerate}
+    \item \textbf{Yahoo Finance} (via \texttt{yfinance}) : cours boursiers historiques, volumes, informations entreprises
+    \item \textbf{Yahoo Finance News} : actualités financières par symbole
+\end{enumerate}
+
+% ============================================
+\section{Architecture}
+% ============================================
+
+\subsection{Vue d'ensemble}
+
+L'architecture suit le pattern Data Lake avec trois couches distinctes :
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{
+\centering
+\textbf{Architecture Data Lake} \\[0.5cm]
+\texttt{Sources} $\rightarrow$ \texttt{Raw} $\rightarrow$ \texttt{Formatted} $\rightarrow$ \texttt{Usage} $\rightarrow$ \texttt{Exposition}
+}}
+\caption{Pipeline de données}
+\end{figure}
+
+\subsection{Couches du Data Lake}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llp{6cm}@{}}
+\toprule
+\textbf{Couche} & \textbf{Format} & \textbf{Description} \\
+\midrule
+Raw & JSON & Données brutes, partitionnées par date d'ingestion \\
+Formatted & Parquet & Données normalisées, types validés, timestamps UTC \\
+Usage & Parquet & Données enrichies, jointures effectuées \\
+\bottomrule
+\end{tabular}
+\caption{Organisation du Data Lake}
+\end{table}
+
+\subsection{Stack technique}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Composant} & \textbf{Technologie} & \textbf{Rôle} \\
+\midrule
+Orchestration & Apache Airflow 2.7 & Planification et exécution des tâches \\
+Transformation & Apache Spark 3.5 & Traitement distribué des données \\
+Indexation & Elasticsearch 8.11 & Moteur de recherche et analytics \\
+Visualisation & Kibana 8.11 & Dashboards interactifs \\
+Base métadonnées & PostgreSQL 15 & Backend Airflow \\
+Conteneurisation & Docker Compose & Déploiement des services \\
+\bottomrule
+\end{tabular}
+\caption{Stack technique}
+\end{table}
+
+% ============================================
+\section{Implémentation}
+% ============================================
+
+\subsection{Structure du projet}
+
+\begin{lstlisting}[language=bash, caption=Arborescence du projet]
+YahooFinance/
+├── airflow/
+│   └── dags/              # DAGs Airflow
+├── config/
+│   └── settings.py        # Configuration centralisee
+├── data/
+│   ├── raw/               # Donnees brutes (JSON)
+│   ├── formatted/         # Donnees normalisees (Parquet)
+│   └── usage/             # Donnees enrichies (Parquet)
+├── scripts/
+│   ├── ingestion/         # Scripts d'ingestion
+│   ├── formatting/        # Transformation Spark
+│   ├── combination/       # Jointure des sources
+│   └── indexing/          # Indexation Elasticsearch
+├── docker-compose.yml
+├── pyproject.toml
+└── README.md
+\end{lstlisting}
+
+\subsection{Pipeline de données}
+
+Le pipeline se décompose en 4 étapes séquentielles :
+
+\subsubsection{1. Ingestion}
+
+L'ingestion collecte les données depuis Yahoo Finance via la bibliothèque \texttt{yfinance}.
+
+\textbf{Données collectées :}
+\begin{itemize}
+    \item \textbf{Stocks} : historique 6 mois (Open, High, Low, Close, Volume)
+    \item \textbf{Company Info} : nom, secteur, industrie, capitalisation
+    \item \textbf{News} : titre, éditeur, date de publication, lien
+\end{itemize}
+
+\textbf{Symboles suivis :} AAPL, GOOGL, MSFT, AMZN, META, TSLA, NVDA, JPM, V, WMT
+
+\begin{lstlisting}[language=Python, caption=Extrait ingestion stocks]
+def fetch_stock_data(symbol: str, period: str = "6mo") -> list[dict]:
+    ticker = yf.Ticker(symbol)
+    hist = ticker.history(period=period)
+
+    records = []
+    for date, row in hist.iterrows():
+        records.append({
+            "symbol": symbol,
+            "date": date.strftime("%Y-%m-%d"),
+            "open": float(row["Open"]),
+            "high": float(row["High"]),
+            "low": float(row["Low"]),
+            "close": float(row["Close"]),
+            "volume": int(row["Volume"]),
+            "fetched_at": datetime.now(UTC).isoformat(),
+        })
+    return records
+\end{lstlisting}
+
+\subsubsection{2. Formatting (Transformation)}
+
+Apache Spark transforme les fichiers JSON en format Parquet avec normalisation :
+
+\begin{itemize}
+    \item Conversion des types (Double, Long, Timestamp)
+    \item Normalisation des dates en UTC
+    \item Validation du schéma
+\end{itemize}
+
+\begin{lstlisting}[language=Python, caption=Transformation Spark]
+df_normalized = (
+    df.withColumn("open", col("open").cast(DoubleType()))
+    .withColumn("high", col("high").cast(DoubleType()))
+    .withColumn("low", col("low").cast(DoubleType()))
+    .withColumn("close", col("close").cast(DoubleType()))
+    .withColumn("volume", col("volume").cast(LongType()))
+    .withColumn("fetched_at_utc", to_utc_timestamp(col("fetched_at"), "UTC"))
+)
+df_normalized.write.mode("overwrite").parquet(output_path)
+\end{lstlisting}
+
+\subsubsection{3. Combination (Enrichissement)}
+
+Cette étape joint les différentes sources pour créer un dataset enrichi :
+
+\begin{lstlisting}[language=Python, caption=Jointure des sources]
+# Agregation des news par symbole
+news_agg = news_df.groupBy("symbol").agg(
+    count("*").alias("news_count"),
+    spark_max("pub_date_utc").alias("latest_news_date")
+)
+
+# Jointure stocks + company info
+stocks_enriched = stocks_df.join(
+    company_df.select("symbol", "name", "sector", "industry", "market_cap"),
+    on="symbol", how="left"
+)
+
+# Jointure avec news
+final_df = stocks_enriched.join(news_agg, on="symbol", how="left")
+
+# Metriques derivees
+final_df = final_df.withColumn(
+    "daily_range", col("high") - col("low")
+).withColumn(
+    "daily_change_pct", ((col("close") - col("open")) / col("open")) * 100
+)
+\end{lstlisting}
+
+\subsubsection{4. Indexation}
+
+Les données enrichies sont indexées dans Elasticsearch pour la recherche et la visualisation.
+
+\textbf{Index créés :}
+\begin{itemize}
+    \item \texttt{stock\_analysis} : données boursières enrichies (1280 documents)
+    \item \texttt{stock\_news} : actualités financières (83 documents)
+\end{itemize}
+
+\begin{lstlisting}[language=Python, caption=Mapping Elasticsearch]
+mapping = {
+    "mappings": {
+        "properties": {
+            "symbol": {"type": "keyword"},
+            "name": {"type": "text"},
+            "sector": {"type": "keyword"},
+            "date": {"type": "date"},
+            "open": {"type": "float"},
+            "close": {"type": "float"},
+            "volume": {"type": "long"},
+            "daily_change_pct": {"type": "float"},
+        }
+    }
+}
+\end{lstlisting}
+
+% ============================================
+\section{Déploiement}
+% ============================================
+
+\subsection{Prérequis}
+
+\begin{itemize}
+    \item Docker et Docker Compose
+    \item Python 3.13+
+    \item Poetry (gestionnaire de dépendances)
+\end{itemize}
+
+\subsection{Installation}
+
+\begin{lstlisting}[language=bash, caption=Commandes d'installation]
+# Cloner le projet
+git clone <repository>
+cd YahooFinance
+
+# Installer les dependances Python
+poetry install
+
+# Demarrer les services Docker
+docker-compose up -d
+\end{lstlisting}
+
+\subsection{Services exposés}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llll@{}}
+\toprule
+\textbf{Service} & \textbf{URL} & \textbf{Port} & \textbf{Credentials} \\
+\midrule
+Airflow & \url{http://localhost:8080} & 8080 & admin/admin \\
+Spark UI & \url{http://localhost:8081} & 8081 & - \\
+Elasticsearch & \url{http://localhost:9200} & 9200 & - \\
+Kibana & \url{http://localhost:5601} & 5601 & - \\
+\bottomrule
+\end{tabular}
+\caption{Services et URLs}
+\end{table}
+
+\subsection{Exécution du pipeline}
+
+\begin{lstlisting}[language=bash, caption=Execution manuelle du pipeline]
+# 1. Ingestion des donnees Yahoo Finance
+poetry run ingest-stocks
+
+# 2. Ingestion des news
+poetry run ingest-news
+
+# 3. Transformation JSON -> Parquet
+poetry run format-data
+
+# 4. Jointure et enrichissement
+poetry run combine-data
+
+# 5. Indexation Elasticsearch
+poetry run index-data
+\end{lstlisting}
+
+% ============================================
+\section{Résultats}
+% ============================================
+
+\subsection{Volumétrie}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lrll@{}}
+\toprule
+\textbf{Dataset} & \textbf{Records} & \textbf{Période} & \textbf{Granularité} \\
+\midrule
+Stock prices & 1 280 & 6 mois & Journalière \\
+Company info & 10 & - & Par symbole \\
+News & 83 & Variable & Par article \\
+Enriched stocks & 1 280 & 6 mois & Journalière \\
+\bottomrule
+\end{tabular}
+\caption{Volumétrie des données}
+\end{table}
+
+\subsection{Schéma des données enrichies}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}llp{5cm}@{}}
+\toprule
+\textbf{Champ} & \textbf{Type} & \textbf{Description} \\
+\midrule
+symbol & keyword & Symbole boursier (ex: AAPL) \\
+name & text & Nom de l'entreprise \\
+sector & keyword & Secteur d'activité \\
+industry & keyword & Industrie \\
+date & date & Date du cours \\
+open & float & Prix d'ouverture \\
+high & float & Prix le plus haut \\
+low & float & Prix le plus bas \\
+close & float & Prix de clôture \\
+volume & long & Volume échangé \\
+market\_cap & long & Capitalisation boursière \\
+daily\_range & float & Amplitude journalière (high - low) \\
+daily\_change\_pct & float & Variation journalière en \% \\
+news\_count & integer & Nombre d'articles associés \\
+latest\_news\_date & date & Date du dernier article \\
+\bottomrule
+\end{tabular}
+\caption{Schéma du dataset enrichi}
+\end{table}
+
+% ============================================
+\section{Visualisation Kibana}
+% ============================================
+
+\subsection{Configuration}
+
+Pour visualiser les données dans Kibana :
+
+\begin{enumerate}
+    \item Accéder à Kibana : \url{http://localhost:5601}
+    \item Créer les Data Views :
+    \begin{itemize}
+        \item \texttt{stock\_analysis} avec timestamp \texttt{date}
+        \item \texttt{stock\_news} avec timestamp \texttt{pub\_date\_utc}
+    \end{itemize}
+    \item Créer les visualisations dans Lens
+\end{enumerate}
+
+\subsection{Visualisations recommandées}
+
+\begin{itemize}
+    \item \textbf{Line chart} : Évolution du prix de clôture par symbole
+    \item \textbf{Bar chart} : Volume par secteur
+    \item \textbf{Pie chart} : Répartition par secteur
+    \item \textbf{Data table} : Dernières news par symbole
+    \item \textbf{Metric} : Capitalisation totale
+\end{itemize}
+
+% ============================================
+\section{Choix techniques}
+% ============================================
+
+\subsection{Pourquoi Parquet ?}
+
+\begin{itemize}
+    \item Format colonnaire optimisé pour l'analytique
+    \item Compression efficace (snappy par défaut)
+    \item Support natif Spark et Pandas
+    \item Schéma embarqué dans le fichier
+\end{itemize}
+
+\subsection{Pourquoi Spark ?}
+
+\begin{itemize}
+    \item Traitement distribué scalable
+    \item API DataFrame familière
+    \item Intégration native avec Parquet
+    \item Mode local pour le développement
+\end{itemize}
+
+\subsection{Pourquoi Elasticsearch + Kibana ?}
+
+\begin{itemize}
+    \item Recherche full-text performante
+    \item Agrégations en temps réel
+    \item Kibana intégré pour la visualisation
+    \item API REST simple
+\end{itemize}
+
+% ============================================
+\section{Améliorations futures}
+% ============================================
+
+\begin{itemize}
+    \item Ajout d'un DAG Airflow pour l'orchestration automatique
+    \item Intégration de sources de données supplémentaires
+    \item Alertes sur les variations de cours
+    \item Machine Learning pour la prédiction de tendances
+    \item Partitionnement des données par date dans le Data Lake
+\end{itemize}
+
+% ============================================
+\section{Conclusion}
+% ============================================
+
+Ce projet démontre la mise en place d'une architecture Big Data complète, de l'ingestion à la visualisation. L'utilisation de technologies modernes (Spark, Elasticsearch, Airflow) permet de créer un pipeline robuste et scalable pour l'analyse de données financières.
+
+Les principales réalisations sont :
+\begin{itemize}
+    \item Data Lake structuré en 3 couches (raw, formatted, usage)
+    \item Pipeline ETL complet avec transformations Spark
+    \item Indexation et visualisation via Elasticsearch/Kibana
+    \item Conteneurisation complète avec Docker Compose
+\end{itemize}
+
+\end{document}

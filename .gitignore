@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# Poetry
+poetry.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Environment
+.env
+*.env.local
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Data (raw data can be large, keep formatted/usage)
+data/raw/
+
+# Airflow
+airflow/logs/
+airflow/*.db
+airflow/*.cfg
+
+# Spark
+spark/logs/
+*.jar
+metastore_db/
+spark-warehouse/
+
+# Elasticsearch
+elasticsearch-data/
+
+# Project files to ignore
+*.rtf
+Big_Data_Project.txt
+
+# Credentials
+*.pem
+*.key
+credentials.json
