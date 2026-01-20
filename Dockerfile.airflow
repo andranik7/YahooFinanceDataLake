@@ -24,4 +24,5 @@ RUN pip install --no-cache-dir \
     elasticsearch \
     loguru \
     python-dotenv \
+    vaderSentiment \
     apache-airflow-providers-apache-spark==4.7.1

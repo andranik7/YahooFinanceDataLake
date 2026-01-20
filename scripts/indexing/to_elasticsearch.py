@@ -130,6 +130,8 @@ def create_news_index(es: Elasticsearch, index_name: str) -> None:
                 "category": {"type": "keyword"},
                 "url": {"type": "keyword"},
                 "image": {"type": "keyword"},
+                "sentiment_score": {"type": "float"},
+                "sentiment_label": {"type": "keyword"},
                 "pub_date": {"type": "date"},
                 "pub_date_utc": {"type": "date"},
                 "fetched_at": {"type": "date"},

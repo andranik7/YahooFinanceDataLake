@@ -1,6 +1,7 @@
 """
 Ingestion script for Finnhub news data.
 Fetches historical news for each stock symbol (up to 1 year) and saves to the raw layer.
+Includes sentiment analysis using VADER.
 """
 
 import json
@@ -11,12 +12,43 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from loguru import logger
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.settings import STOCK_SYMBOLS, NEWS_RAW, FINNHUB_API_KEY
 
 
 FINNHUB_BASE_URL = "https://finnhub.io/api/v1"
+
+# Initialize sentiment analyzer
+sentiment_analyzer = SentimentIntensityAnalyzer()
+
+
+def analyze_sentiment(text: str) -> dict:
+    """
+    Analyze sentiment of text using VADER.
+
+    Returns:
+        dict with sentiment_score (compound) and sentiment_label
+    """
+    if not text:
+        return {"sentiment_score": 0.0, "sentiment_label": "neutral"}
+
+    scores = sentiment_analyzer.polarity_scores(text)
+    compound = scores["compound"]
+
+    # Classify sentiment
+    if compound >= 0.05:
+        label = "positive"
+    elif compound <= -0.05:
+        label = "negative"
+    else:
+        label = "neutral"
+
+    return {
+        "sentiment_score": round(compound, 4),
+        "sentiment_label": label
+    }
 
 
 def fetch_news(symbol: str, from_date: str, to_date: str) -> list[dict]:
@@ -59,16 +91,25 @@ def fetch_news(symbol: str, from_date: str, to_date: str) -> list[dict]:
             pub_timestamp = item.get("datetime", 0)
             pub_date = datetime.fromtimestamp(pub_timestamp, tz=timezone.utc).isoformat()
 
+            title = item.get("headline", "")
+            summary = item.get("summary", "")
+
+            # Analyze sentiment on title + summary combined
+            text_for_sentiment = f"{title}. {summary}" if summary else title
+            sentiment = analyze_sentiment(text_for_sentiment)
+
             parsed_news.append({
                 "id": str(item.get("id", "")),
                 "symbol": symbol,
-                "title": item.get("headline", ""),
-                "summary": item.get("summary", ""),
+                "title": title,
+                "summary": summary,
                 "pub_date": pub_date,
                 "provider": item.get("source", ""),
                 "url": item.get("url", ""),
                 "category": item.get("category", ""),
                 "image": item.get("image", ""),
+                "sentiment_score": sentiment["sentiment_score"],
+                "sentiment_label": sentiment["sentiment_label"],
                 "fetched_at": datetime.now(timezone.utc).isoformat(),
             })
 
