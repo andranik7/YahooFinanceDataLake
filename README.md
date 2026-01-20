@@ -135,8 +135,8 @@ start → [ingest_stocks, ingest_news] → format_data → combine_data → inde
 
 | Task | Opérateur | Description |
 |------|-----------|-------------|
-| ingest_stocks | PythonOperator | Collecte cours + infos entreprises |
-| ingest_news | PythonOperator | Collecte actualités |
+| ingest_stocks | PythonOperator | Collecte cours + infos entreprises (~30 sec) |
+| ingest_news | PythonOperator | Collecte 12 mois de news via Finnhub (~3 min, 120 appels API) |
 | format_data | SparkSubmitOperator | Conversion JSON → Parquet |
 | combine_data | SparkSubmitOperator | Jointure + métriques |
 | index_data | PythonOperator | Indexation Elasticsearch |
@@ -251,6 +251,23 @@ docker compose exec airflow curl -s -X POST "http://kibana:5601/api/saved_object
   -o /opt/airflow/kibana/kibana_saved_objects.ndjson
 ```
 
+## Ingestion des news Finnhub
+
+L'API Finnhub est interrogée **mois par mois** pour récupérer 12 mois d'historique complet.
+
+### Détails techniques
+
+| Paramètre | Valeur |
+|-----------|--------|
+| Période | 12 mois |
+| Symboles | 10 |
+| Appels API | 120 (10 × 12) |
+| Rate limit | 60 appels/min (free tier) |
+| Durée totale | ~3 minutes |
+| Volume | ~21 000 articles |
+
+> L'ingestion utilise un délai de 1.1 seconde entre chaque appel pour respecter le rate limit de Finnhub.
+
 ## Analyse de sentiment
 
 Le projet utilise **VADER** (Valence Aware Dictionary and sEntiment Reasoner) pour analyser automatiquement le sentiment des actualités financières.
@@ -269,6 +286,21 @@ Le projet utilise **VADER** (Valence Aware Dictionary and sEntiment Reasoner) po
 - Filtrer les news négatives : `sentiment_label: "negative"`
 - Visualiser la distribution des sentiments par symbole
 - Créer des alertes sur les news très négatives (score < -0.5)
+
+### Exemple : Graphique sentiment sous le graphique de prix
+
+Pour visualiser l'impact du sentiment sur les prix :
+
+1. **Graphique 1 (prix)** : Line chart sur `stock_analysis`
+   - X: `date`, Y: `close`
+
+2. **Graphique 2 (sentiment)** : Bar chart sur `stock_news`
+   - X: `pub_date_utc` (interval: 1 day)
+   - Y: Count of records
+   - Breakdown: `sentiment_label`
+
+3. Placer les deux graphiques dans le même dashboard, l'un sous l'autre
+4. Ils partagent le même time range → les corrélations sont visibles
 
 ## Arrêt
 
