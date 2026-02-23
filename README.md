@@ -79,7 +79,7 @@ YahooFinance/
 | Analyse sentiment | VADER | 3.3.2 |
 | API News | Finnhub | - |
 
-> Airflow utilise une image Docker custom (`Dockerfile.airflow`) avec Java et PySpark pour soumettre les jobs Spark via `SparkSubmitOperator`.
+> Airflow utilise une image Docker custom (`Dockerfile.airflow`) avec Java et PySpark pour exécuter les jobs Spark via `spark-submit`.
 
 ## Installation
 
@@ -101,17 +101,13 @@ docker-compose up -d
 
 # 5. Vérifier que les services sont up
 docker-compose ps
-
-# 6. Configurer la connexion Spark dans Airflow
-docker-compose exec airflow airflow connections add spark_default \
-    --conn-type spark \
-    --conn-host spark://spark-master \
-    --conn-port 7077
 ```
 
 > **Note** : Les dashboards Kibana sont automatiquement importés au démarrage via `init_kibana.sh`.
 
 > **Note** : L'installation locale via Poetry (`poetry install`) est optionnelle, pour le développement uniquement.
+
+> **Note** : La connexion Spark est configurée directement dans le DAG, aucune connexion Airflow n'est requise.
 
 ## Services
 
@@ -137,8 +133,8 @@ start → [ingest_stocks, ingest_news] → format_data → combine_data → inde
 |------|-----------|-------------|
 | ingest_stocks | PythonOperator | Collecte cours + infos entreprises (5 ans d'historique) |
 | ingest_news | PythonOperator | Collecte 12 mois de news via Finnhub (~3 min, 120 appels API) |
-| format_data | SparkSubmitOperator | Conversion JSON → Parquet |
-| combine_data | SparkSubmitOperator | Jointure + métriques |
+| format_data | BashOperator | Conversion JSON → Parquet (spark-submit) |
+| combine_data | BashOperator | Jointure + métriques (spark-submit) |
 | index_data | PythonOperator | Indexation Elasticsearch |
 
 ### Exécution

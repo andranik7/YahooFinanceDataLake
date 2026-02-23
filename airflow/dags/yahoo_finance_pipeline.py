@@ -8,8 +8,8 @@ Uses SparkSubmitOperator for Spark jobs.
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 
 import sys
 from pathlib import Path
@@ -73,30 +73,17 @@ with DAG(
         python_callable=run_ingest_news,
     )
 
-    # Spark tasks using SparkSubmitOperator
+    # Spark tasks using BashOperator to run spark-submit directly
     # Scripts are mounted in Airflow at /opt/airflow/scripts
-    format_data = SparkSubmitOperator(
+    format_data = BashOperator(
         task_id="format_data",
-        application="/opt/airflow/scripts/formatting/format_to_parquet.py",
-        conn_id="spark_default",
-        deploy_mode="client",
-        verbose=True,
-        conf={
-            "spark.master": "spark://spark-master:7077",
-        },
+        bash_command="spark-submit --master spark://spark-master:7077 --deploy-mode client /opt/airflow/scripts/formatting/format_to_parquet.py",
     )
-
-    combine_data = SparkSubmitOperator(
+    
+    combine_data = BashOperator(
         task_id="combine_data",
-        application="/opt/airflow/scripts/combination/combine_sources.py",
-        conn_id="spark_default",
-        deploy_mode="client",
-        verbose=True,
-        conf={
-            "spark.master": "spark://spark-master:7077",
-        },
+        bash_command="spark-submit --master spark://spark-master:7077 --deploy-mode client /opt/airflow/scripts/combination/combine_sources.py",
     )
-
     # Indexation task - use Python as no Spark needed
     index_data = PythonOperator(
         task_id="index_data",
