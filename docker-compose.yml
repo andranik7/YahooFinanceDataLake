@@ -12,7 +12,7 @@ services:
       - AIRFLOW__CORE__FERNET_KEY=AEf0WxrZ2NVRYRVkkgkk4mONGv8rogecP239_JSmb0U=
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__WEBSERVER__SECRET_KEY=supersecretkey123
-      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-arm64
+      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk
       - ELASTICSEARCH_HOST=elasticsearch
       - FINNHUB_API_KEY=${FINNHUB_API_KEY}
     volumes:
