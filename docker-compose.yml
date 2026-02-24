@@ -13,26 +13,27 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__WEBSERVER__SECRET_KEY=supersecretkey123
       - JAVA_HOME=/usr/lib/jvm/java-11-openjdk
-      - ELASTICSEARCH_HOST=elasticsearch
+      - AIRFLOW__LOGGING__REMOTE_LOGGING=False
       - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy    # <-- attend que Postgres soit vraiment prêt
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/plugins:/opt/airflow/plugins
-      - ./data:/opt/airflow/data
+      - airflow_data:/opt/airflow/data
       - ./scripts:/opt/airflow/scripts
       - ./config:/opt/airflow/config
       - ./spark:/opt/airflow/spark
       - ./kibana:/opt/airflow/kibana
     ports:
       - "8080:8080"
-    depends_on:
-      - postgres
     command: >
       bash -c "
       mkdir -p /opt/airflow/data/raw/stocks /opt/airflow/data/raw/news /opt/airflow/data/formatted/yahoo_finance/stocks /opt/airflow/data/formatted/yahoo_finance/news /opt/airflow/data/combined /opt/airflow/data/predictions &&
       chmod -R 777 /opt/airflow/data &&
-      airflow db init &&
+      airflow db migrate &&
       airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true &&
       (sleep 30 && /opt/airflow/scripts/init_kibana.sh) &
       airflow webserver & airflow scheduler"
@@ -54,6 +55,11 @@ services:
       - "5432:5432"
     networks:
       - bigdata-network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
+      start_period: 5s
 
   # ============================================
   # SPARK (Processing)
@@ -72,7 +78,7 @@ services:
       - "7077:7077"
       - "8081:8080"
     volumes:
-      - ./data:/opt/airflow/data
+      - airflow_data:/opt/airflow/data
       - ./scripts:/opt/airflow/scripts
       - ./config:/opt/airflow/config
     networks:
@@ -93,7 +99,7 @@ services:
     depends_on:
       - spark-master
     volumes:
-      - ./data:/opt/airflow/data
+      - airflow_data:/opt/airflow/data
       - ./scripts:/opt/airflow/scripts
       - ./config:/opt/airflow/config
     networks:
@@ -136,3 +142,4 @@ networks:
 volumes:
   postgres-data:
   elasticsearch-data:
+  airflow_data:

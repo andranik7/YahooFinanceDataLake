@@ -83,12 +83,12 @@ with DAG(
     # Scripts are mounted in Airflow at /opt/airflow/scripts
     format_data = BashOperator(
         task_id="format_data",
-        bash_command="spark-submit --master spark://spark-master:7077 --deploy-mode client /opt/airflow/scripts/formatting/format_to_parquet.py",
+        bash_command="spark-submit --master local[*] --deploy-mode client /opt/airflow/scripts/formatting/format_to_parquet.py",
     )
     
     combine_data = BashOperator(
         task_id="combine_data",
-        bash_command="spark-submit --master spark://spark-master:7077 --deploy-mode client /opt/airflow/scripts/combination/combine_sources.py",
+        bash_command="spark-submit --master local[*] --deploy-mode client /opt/airflow/scripts/combination/combine_sources.py",
     )
     # ARIMA prediction task
     predict_arima = PythonOperator(
