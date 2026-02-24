@@ -4,6 +4,8 @@ Creates enriched dataset in the usage layer.
 """
 
 import sys
+import shutil
+import tempfile
 from pathlib import Path
 
 from pyspark.sql import SparkSession
@@ -18,6 +20,20 @@ from config.settings import (
     SPARK_APP_NAME,
     SPARK_MASTER_URL,
 )
+
+
+def write_parquet_safe(df, output_path: str) -> None:
+    """Write Parquet via a temp dir to avoid rename issues on Windows/WSL2 bind mounts."""
+    tmp_dir = tempfile.mkdtemp(prefix="spark_out_")
+    tmp_output = str(Path(tmp_dir) / "data.parquet")
+    try:
+        df.write.mode("overwrite").parquet(tmp_output)
+        final = Path(output_path)
+        if final.exists():
+            shutil.rmtree(final)
+        shutil.copytree(tmp_output, str(final))
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def get_spark_session() -> SparkSession:
@@ -108,7 +124,7 @@ def combine_sources(spark: SparkSession) -> None:
     output_path = USAGE_PATH / "stock_analysis"
     output_path.mkdir(parents=True, exist_ok=True)
 
-    final_df.write.mode("overwrite").parquet(str(output_path / "enriched_stocks.parquet"))
+    write_parquet_safe(final_df, str(output_path / "enriched_stocks.parquet"))
 
     logger.info(f"Saved {final_df.count()} enriched records to {output_path}")
 
