@@ -30,11 +30,9 @@ def write_parquet_safe(df, output_path: str) -> None:
     tmp_output = str(Path(tmp_dir) / "data.parquet")
     try:
         df.write.mode("overwrite").parquet(tmp_output)
-        # Remove existing output and copy from temp
         final = Path(output_path)
-        if final.exists():
-            shutil.rmtree(final)
-        shutil.copytree(tmp_output, str(final))
+        shutil.rmtree(final, ignore_errors=True)
+        shutil.copytree(tmp_output, str(final), dirs_exist_ok=True)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
