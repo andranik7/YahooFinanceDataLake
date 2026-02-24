@@ -208,6 +208,7 @@ def create_predictions_index(es: Elasticsearch, index_name: str) -> None:
                 "predicted_close": {"type": "float"},
                 "confidence_lower": {"type": "float"},
                 "confidence_upper": {"type": "float"},
+                "sentiment_score": {"type": "float"},
                 "type": {"type": "keyword"},
             }
         }

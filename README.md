@@ -1,6 +1,6 @@
 # Yahoo Finance Data Lake
 
-Projet Big Data : architecture complète de collecte, transformation et visualisation de données financières.
+Projet Big Data : architecture complète de collecte, transformation, prédiction et visualisation de données financières.
 
 ## Description
 
@@ -9,6 +9,7 @@ Ce projet implémente un Data Lake pour l'analyse boursière avec :
 - Collecte d'actualités financières via **Finnhub API** (12 mois d'historique)
 - **Analyse de sentiment** automatique avec VADER
 - Transformation et enrichissement avec Apache Spark
+- **Prédiction des cours** avec SARIMAX + sentiment des actualités comme variable exogène
 - Indexation dans Elasticsearch
 - Visualisation via dashboards Kibana (avec import automatique)
 
@@ -20,14 +21,15 @@ Ce projet implémente un Data Lake pour l'analyse boursière avec :
 ┌─────────────────┐
 │  Yahoo Finance  │──┐
 │  (yfinance)     │  │
-└─────────────────┘  │     ┌─────────┐     ┌─────────────┐     ┌─────────┐     ┌───────────────┐
-                     ├────►│   RAW   │────►│  FORMATTED  │────►│  USAGE  │────►│ Elasticsearch │
-┌─────────────────┐  │     │  (JSON) │     │  (Parquet)  │     │(Parquet)│     │    Kibana     │
-│  Finnhub API    │──┘     └─────────┘     └─────────────┘     └─────────┘     └───────────────┘
-│  (news + VADER) │              │               │                  │
-└─────────────────┘         Partitionné     Normalisé UTC      Jointures
-                            par date        Types validés      Métriques
-                                            + Sentiment
+└─────────────────┘  │     ┌─────────┐     ┌─────────────┐     ┌─────────┐     ┌───────────────┐     ┌───────────────┐
+                     ├────►│   RAW   │────►│  FORMATTED  │────►│  USAGE  │────►│  PREDICTION   │────►│ Elasticsearch │
+┌─────────────────┐  │     │  (JSON) │     │  (Parquet)  │     │(Parquet)│     │   (SARIMAX    │     │    Kibana     │
+│  Finnhub API    │──┘     └─────────┘     └─────────────┘     └─────────┘     │ + Sentiment)  │     └───────────────┘
+│  (news + VADER) │              │               │                  │           └───────┬───────┘
+└─────────────────┘         Partitionné     Normalisé UTC      Jointures              │
+                            par date        Types validés      Métriques        Croisement cours
+                                            + Sentiment                       + sentiment des news
+                                                                             Bandes de confiance 95%
 ```
 
 ## Prérequis
@@ -41,29 +43,35 @@ Ce projet implémente un Data Lake pour l'analyse boursière avec :
 ```
 YahooFinance/
 ├── config/
-│   └── settings.py         # Configuration centralisée
+│   └── settings.py             # Configuration centralisée
 ├── data/
-│   ├── raw/                # Données brutes (JSON partitionné par date)
+│   ├── raw/                    # Données brutes (JSON partitionné par date)
 │   │   ├── yahoo_finance/
 │   │   └── news/
-│   ├── formatted/          # Données normalisées (Parquet)
-│   └── usage/              # Données enrichies finales
+│   ├── formatted/              # Données normalisées (Parquet)
+│   └── usage/
+│       ├── stock_analysis/     # Données enrichies finales
+│       └── predictions/        # Prédictions Holt-Winters (Parquet)
 ├── scripts/
-│   ├── ingestion/          # Collecte des données
-│   │   ├── yahoo_stocks.py # Stocks + Company Info
-│   │   └── finnhub_news.py # Actualités Finnhub + sentiment VADER
-│   ├── formatting/         # Transformation Spark
-│   ├── combination/        # Jointure des sources
-│   ├── indexing/           # Indexation Elasticsearch
-│   └── init_kibana.sh      # Import auto des dashboards
+│   ├── ingestion/              # Collecte des données
+│   │   ├── yahoo_stocks.py     # Stocks + Company Info
+│   │   └── finnhub_news.py     # Actualités Finnhub + sentiment VADER
+│   ├── formatting/             # Transformation Spark (JSON → Parquet)
+│   │   └── format_to_parquet.py
+│   ├── combination/            # Jointure des sources
+│   │   └── combine_sources.py
+│   ├── prediction/             # Machine Learning
+│   │   └── arima_forecast.py   # Prédictions SARIMAX + sentiment
+│   ├── indexing/               # Indexation Elasticsearch
+│   │   └── to_elasticsearch.py
+│   ├── init_kibana.sh          # Import auto des dashboards
+│   └── kibana_export.py        # Export/Import des dashboards
 ├── kibana/
 │   └── kibana_saved_objects.ndjson  # Dashboards exportés
-├── airflow/dags/           # Orchestration du pipeline
+├── airflow/dags/               # Orchestration du pipeline
 │   └── yahoo_finance_pipeline.py
-├── docs/
-│   └── rapport.tex         # Documentation LaTeX
 ├── docker-compose.yml
-└── Dockerfile.airflow      # Image Airflow avec Java/Spark
+└── Dockerfile.airflow          # Image Airflow avec Java/Spark/statsmodels
 ```
 
 ## Stack technique
@@ -72,6 +80,7 @@ YahooFinance/
 |-----------|-------------|---------|
 | Orchestration | Apache Airflow | 2.7.3 |
 | Transformation | Apache Spark | 3.5.0 |
+| Prédiction | statsmodels (SARIMAX) | - |
 | Indexation | Elasticsearch | 8.11.0 |
 | Visualisation | Kibana | 8.11.0 |
 | Base métadonnées | PostgreSQL | 15 |
@@ -79,7 +88,7 @@ YahooFinance/
 | Analyse sentiment | VADER | 3.3.2 |
 | API News | Finnhub | - |
 
-> Airflow utilise une image Docker custom (`Dockerfile.airflow`) avec Java et PySpark pour exécuter les jobs Spark via `spark-submit`.
+> Airflow utilise une image Docker custom (`Dockerfile.airflow`) avec Java, PySpark et statsmodels pour exécuter les jobs Spark et les prédictions.
 
 ## Installation
 
@@ -125,17 +134,18 @@ Le pipeline est orchestré via un DAG Airflow qui enchaîne automatiquement tout
 ### DAG : `yahoo_finance_pipeline`
 
 ```
-start → [ingest_stocks, ingest_news] → format_data → combine_data → index_data → end
-              (parallèle)                (Spark)       (Spark)
+start → [ingest_stocks, ingest_news] → format_data → combine_data → predict_arima → index_data → end
+              (parallèle)                (Spark)       (Spark)      (Holt-Winters)     (ES)
 ```
 
 | Task | Opérateur | Description |
 |------|-----------|-------------|
-| ingest_stocks | PythonOperator | Collecte cours + infos entreprises (5 ans d'historique) |
-| ingest_news | PythonOperator | Collecte 12 mois de news via Finnhub (~3 min, 120 appels API) |
-| format_data | BashOperator | Conversion JSON → Parquet (spark-submit) |
-| combine_data | BashOperator | Jointure + métriques (spark-submit) |
-| index_data | PythonOperator | Indexation Elasticsearch |
+| `ingest_stocks` | PythonOperator | Collecte cours + infos entreprises (5 ans d'historique) |
+| `ingest_news` | PythonOperator | Collecte 12 mois de news via Finnhub (~3 min, 120 appels API) |
+| `format_data` | BashOperator | Conversion JSON → Parquet (spark-submit) |
+| `combine_data` | BashOperator | Jointure stocks + company info + news agrégées (spark-submit) |
+| `predict_arima` | PythonOperator | Prédictions SARIMAX + sentiment des news sur 30 jours |
+| `index_data` | PythonOperator | Indexation dans Elasticsearch (3 index) |
 
 ### Exécution
 
@@ -145,24 +155,104 @@ start → [ingest_stocks, ingest_news] → format_data → combine_data → inde
 
 > **Indexation incrémentale** : Le pipeline ajoute les nouvelles données sans supprimer l'historique. Les documents sont mis à jour via leur identifiant unique (`symbol_date` pour les stocks, `uuid` pour les news).
 
-## Pipeline manuel (optionnel)
+## Prédiction des cours (Machine Learning)
 
-Pour exécuter les étapes individuellement en local :
+Le projet intègre une phase de prédiction des cours financiers utilisant **SARIMAX** avec le **sentiment des actualités** comme variable exogène. Le modèle croise ainsi l'analyse de séries temporelles avec le NLP (sentiment analysis) pour produire des prédictions plus contextualisées.
 
-```bash
-# 1. Ingestion (collecte des données Yahoo Finance)
-poetry run ingest-stocks    # Stocks + Company Info (12 mois d'historique)
-poetry run ingest-news      # Actualités financières
+### Modèle utilisé
 
-# 2. Transformation (JSON → Parquet avec Spark)
-poetry run format-data
+**SARIMAX** (Seasonal AutoRegressive Integrated Moving Average with eXogenous variables) via `statsmodels.tsa.statespace.sarimax.SARIMAX` :
+- **Ordre ARIMA** : (2, 1, 2) — composantes auto-régressives et moyenne mobile
+- **Saisonnalité** : (1, 1, 1, 5) — cycle hebdomadaire de 5 jours ouvrés
+- **Variable exogène** : score de sentiment agrégé quotidien par symbole (issu de VADER)
+- **Entraînement** : sur les 252 derniers jours de trading (~1 an)
+- **Horizon** : 30 jours ouvrés de prédiction
 
-# 3. Combinaison (jointure + métriques dérivées)
-poetry run combine-data
+### Fonctionnement
 
-# 4. Indexation (Elasticsearch)
-poetry run index-data
-```
+1. Les actualités financières sont agrégées par jour et par symbole pour obtenir un **score de sentiment moyen quotidien**
+2. Pour chaque symbole, le modèle SARIMAX est entraîné sur la série temporelle du prix de clôture (`close`) avec le sentiment comme variable exogène
+3. Pour les jours futurs, le **sentiment moyen des 30 derniers jours** est utilisé comme hypothèse de projection
+4. Les **bandes de confiance à 95%** sont calculées automatiquement par SARIMAX
+5. Les 90 derniers jours de données réelles sont inclus pour assurer la continuité visuelle sur le dashboard
+
+### Impact du sentiment
+
+Le sentiment des news influence directement les prédictions :
+- Un sentiment **positif** (ex: AMZN ~0.41) ajuste les prédictions à la hausse
+- Un sentiment **négatif** ou **neutre** (ex: TSLA ~0.10) produit des prédictions plus conservatrices
+- Les jours sans actualités reçoivent un sentiment neutre (0.0)
+
+### Sortie
+
+Le script produit un fichier `data/usage/predictions/arima_predictions.parquet` contenant :
+
+| Champ | Description |
+|-------|-------------|
+| `symbol` | Symbole boursier |
+| `date` | Date de la valeur |
+| `predicted_close` | Cours prédit (ou réel pour les données historiques) |
+| `confidence_lower` | Borne inférieure de l'intervalle de confiance (95%) |
+| `confidence_upper` | Borne supérieure de l'intervalle de confiance (95%) |
+| `sentiment_score` | Score de sentiment utilisé pour la prédiction |
+| `type` | `actual` (données réelles) ou `forecast` (prédiction) |
+
+## Ingestion des données
+
+### Yahoo Finance (cours boursiers)
+
+Le script `scripts/ingestion/yahoo_stocks.py` récupère via la librairie `yfinance` :
+- **Historique des cours** : open, high, low, close, volume sur 5 ans
+- **Informations entreprise** : nom, secteur, industrie, capitalisation boursière
+
+Les données sont sauvegardées en JSON, partitionnées par date dans `data/raw/yahoo_finance/`.
+
+### Finnhub (actualités financières)
+
+Le script `scripts/ingestion/finnhub_news.py` récupère les articles via l'API Finnhub :
+
+| Paramètre | Valeur |
+|-----------|--------|
+| Période | 12 mois |
+| Symboles | 10 |
+| Appels API | 120 (10 × 12) |
+| Rate limit | 60 appels/min (free tier) |
+| Durée totale | ~3 minutes |
+| Volume | ~21 000 articles |
+
+> L'ingestion utilise un délai de 1.1 seconde entre chaque appel pour respecter le rate limit de Finnhub.
+
+## Transformation Spark
+
+### Formatting (`scripts/formatting/format_to_parquet.py`)
+
+Conversion des données brutes JSON en Parquet avec :
+- Normalisation des types (float, long, date)
+- Conversion des timestamps en UTC
+- Partitionnement optimisé pour Spark
+
+### Combination (`scripts/combination/combine_sources.py`)
+
+Jointure des sources de données :
+1. **Stocks ⨝ Company Info** (sur `symbol`) : enrichit les cours avec les infos entreprise
+2. **Résultat ⨝ News agrégées** (sur `symbol`) : ajoute le nombre d'articles et la date de la dernière news
+
+Métriques dérivées calculées :
+- `daily_range` = high - low (amplitude journalière)
+- `daily_change_pct` = ((close - open) / open) × 100 (variation en %)
+
+## Analyse de sentiment
+
+Le projet utilise **VADER** (Valence Aware Dictionary and sEntiment Reasoner) pour analyser automatiquement le sentiment des actualités financières.
+
+### Comment ça fonctionne
+
+1. Lors de l'ingestion, chaque article (title + summary) est analysé
+2. VADER retourne un score `compound` entre -1.0 et 1.0
+3. Le score est classifié en label :
+   - `positive` : score >= 0.05
+   - `negative` : score <= -0.05
+   - `neutral` : entre -0.05 et 0.05
 
 ## Schéma des données
 
@@ -196,43 +286,35 @@ poetry run index-data
 | category | keyword | Catégorie (company, market, etc.) |
 | pub_date_utc | date | Date de publication |
 | url | keyword | URL de l'article |
-| **sentiment_score** | float | Score de sentiment (-1.0 à 1.0) |
-| **sentiment_label** | keyword | Label (positive, negative, neutral) |
+| sentiment_score | float | Score de sentiment (-1.0 à 1.0) |
+| sentiment_label | keyword | Label (positive, negative, neutral) |
+
+### Index `stock_predictions` (prédictions ML)
+
+| Champ | Type | Description |
+|-------|------|-------------|
+| symbol | keyword | Symbole boursier |
+| date | date | Date de la valeur |
+| predicted_close | float | Cours prédit ou réel |
+| confidence_lower | float | Borne inférieure (IC 95%) |
+| confidence_upper | float | Borne supérieure (IC 95%) |
+| sentiment_score | float | Score de sentiment utilisé pour la prédiction |
+| type | keyword | `actual` ou `forecast` |
 
 ## Visualisation Kibana
 
-### 1. Créer les Data Views
+Les dashboards sont **automatiquement importés** au démarrage du projet via `scripts/init_kibana.sh`. Aucune configuration manuelle n'est requise.
 
-1. Aller sur http://localhost:5601
-2. Stack Management → Data Views → Create data view
-3. Créer deux data views :
-   - `stock_analysis` avec timestamp `date`
-   - `stock_news` avec timestamp `pub_date_utc`
+### Dashboard principal : "Cours des actions US sur 90 jours"
 
-### 2. Créer un dashboard
+Le dashboard contient les visualisations suivantes :
 
-1. Analytics → Dashboard → Create
-2. Ajouter des visualisations :
-   - **Line chart** : Évolution du prix de clôture
-   - **Bar chart** : Volume par symbole
-   - **Pie chart** : Répartition par secteur
-   - **Data table** : Dernières news
-
-### Exemple : Graphique prix AAPL
-
-1. Create visualization → Lens
-2. Data view : `stock_analysis`
-3. Horizontal axis : `date`
-4. Vertical axis : `Average of close`
-5. Filter : `symbol: AAPL`
-6. Time range : Last 12 months
-
-### Exemple : Tableau des dernières news avec sentiment
-
-1. Discover → Data view : `stock_news`
-2. Ajouter colonnes : `symbol`, `title`, `summary`, `sentiment_label`, `sentiment_score`, `pub_date_utc`
-3. Trier par `pub_date_utc` décroissant
-4. Save et ajouter au dashboard
+1. **Évolution des cours** : Line chart montrant le prix de clôture par symbole sur les 90 derniers jours (index `stock_analysis`)
+2. **Tableau des actualités** : Dernières news avec titre, résumé, score de sentiment et label (index `stock_news`)
+3. **Cours réels + Prédictions SARIMAX** : Graphique combiné montrant :
+   - Les 90 derniers jours de cours réels (lignes solides)
+   - Les 30 jours de prédictions (lignes continues)
+   - Les bandes de confiance à 95% (zones area)
 
 ### Export/Import des dashboards
 
@@ -240,56 +322,40 @@ Les dashboards sont sauvegardés dans `kibana/kibana_saved_objects.ndjson` et im
 
 Pour exporter vos modifications :
 ```bash
-docker compose exec airflow curl -s -X POST "http://kibana:5601/api/saved_objects/_export" \
+curl -s -X POST "http://localhost:5601/api/saved_objects/_export" \
   -H "kbn-xsrf: true" \
   -H "Content-Type: application/json" \
   -d '{"type": ["dashboard", "visualization", "lens", "index-pattern", "search"], "includeReferencesDeep": true}' \
-  -o /opt/airflow/kibana/kibana_saved_objects.ndjson
+  -o kibana/kibana_saved_objects.ndjson
 ```
 
-## Ingestion des news Finnhub
+## Pipeline manuel (optionnel)
 
-L'API Finnhub est interrogée **mois par mois** pour récupérer 12 mois d'historique complet.
+Pour exécuter les étapes individuellement en local :
 
-### Détails techniques
+```bash
+# 1. Ingestion (collecte des données Yahoo Finance)
+poetry run ingest-stocks    # Stocks + Company Info (5 ans d'historique)
+poetry run ingest-news      # Actualités financières
 
-| Paramètre | Valeur |
-|-----------|--------|
-| Période | 12 mois |
-| Symboles | 10 |
-| Appels API | 120 (10 × 12) |
-| Rate limit | 60 appels/min (free tier) |
-| Durée totale | ~3 minutes |
-| Volume | ~21 000 articles |
+# 2. Transformation (JSON → Parquet avec Spark)
+poetry run format-data
 
-> L'ingestion utilise un délai de 1.1 seconde entre chaque appel pour respecter le rate limit de Finnhub.
+# 3. Combinaison (jointure + métriques dérivées)
+poetry run combine-data
 
-## Analyse de sentiment
+# 4. Prédiction (Holt-Winters)
+python scripts/prediction/arima_forecast.py
 
-Le projet utilise **VADER** (Valence Aware Dictionary and sEntiment Reasoner) pour analyser automatiquement le sentiment des actualités financières.
-
-### Comment ça fonctionne
-
-1. Lors de l'ingestion, chaque article (title + summary) est analysé
-2. VADER retourne un score `compound` entre -1.0 et 1.0
-3. Le score est classifié en label :
-   - `positive` : score >= 0.05
-   - `negative` : score <= -0.05
-   - `neutral` : entre -0.05 et 0.05
+# 5. Indexation (Elasticsearch)
+poetry run index-data
+```
 
 ## Arrêt
 
 ```bash
-docker-compose down           # Stopper les services
-docker-compose down -v        # Stopper + supprimer les volumes
+docker-compose down           # Stopper les services (données conservées)
+docker-compose down -v        # Stopper + supprimer les volumes (perte des données)
 ```
 
-## Documentation
-
-Le rapport technique complet est disponible dans `docs/rapport.tex`. Pour générer le PDF :
-
-```bash
-cd docs
-pdflatex rapport.tex
-pdflatex rapport.tex  # 2ème fois pour la table des matières
-```
+> **Attention** : `docker-compose down -v` supprime les volumes Elasticsearch. Les dashboards seront réimportés automatiquement au prochain démarrage, mais les données devront être réingérées via le DAG Airflow.
