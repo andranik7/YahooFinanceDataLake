@@ -1,4 +1,4 @@
-FROM apache/airflow:2.7.3-python3.10
+exFROM apache/airflow:2.7.3-python3.10
 
 USER root
 
@@ -29,3 +29,12 @@ RUN pip install --no-cache-dir \
     vaderSentiment \
     statsmodels \
     apache-airflow-providers-apache-spark==4.7.1
+
+# Set environment variables for Spark
+RUN mkdir -p /opt/airflow/data/raw/stocks \
+    /opt/airflow/data/raw/news \
+    /opt/airflow/data/formatted/yahoo_finance/stocks \
+    /opt/airflow/data/formatted/yahoo_finance/news \
+    /opt/airflow/data/combined \
+    /opt/airflow/data/predictions \
+    && chmod -R 777 /opt/airflow/data
