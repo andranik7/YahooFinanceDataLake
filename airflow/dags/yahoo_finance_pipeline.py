@@ -42,6 +42,12 @@ def run_ingest_news():
     main()
 
 
+def run_predict_arima():
+    """Task: Run ARIMA predictions on stock data."""
+    from scripts.prediction.arima_forecast import main
+    main()
+
+
 def run_index_data():
     """Task: Index data to Elasticsearch."""
     from scripts.indexing.to_elasticsearch import main
@@ -84,6 +90,12 @@ with DAG(
         task_id="combine_data",
         bash_command="spark-submit --master spark://spark-master:7077 --deploy-mode client /opt/airflow/scripts/combination/combine_sources.py",
     )
+    # ARIMA prediction task
+    predict_arima = PythonOperator(
+        task_id="predict_arima",
+        python_callable=run_predict_arima,
+    )
+
     # Indexation task - use Python as no Spark needed
     index_data = PythonOperator(
         task_id="index_data",
@@ -96,4 +108,4 @@ with DAG(
     # Define task dependencies
     start >> [ingest_stocks, ingest_news]
     [ingest_stocks, ingest_news] >> format_data
-    format_data >> combine_data >> index_data >> end
+    format_data >> combine_data >> predict_arima >> index_data >> end

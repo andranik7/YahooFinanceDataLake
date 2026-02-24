@@ -27,4 +27,5 @@ RUN pip install --no-cache-dir \
     loguru \
     python-dotenv \
     vaderSentiment \
+    statsmodels \
     apache-airflow-providers-apache-spark==4.7.1

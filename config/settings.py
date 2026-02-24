@@ -47,6 +47,7 @@ ELASTICSEARCH_HOST = os.getenv("ELASTICSEARCH_HOST", "localhost")
 ELASTICSEARCH_PORT = int(os.getenv("ELASTICSEARCH_PORT", 9200))
 ELASTICSEARCH_INDEX = "stock_analysis"
 ELASTICSEARCH_NEWS_INDEX = "stock_news"
+ELASTICSEARCH_PREDICTIONS_INDEX = "stock_predictions"
 
 # Spark
 SPARK_MASTER_URL = os.getenv("SPARK_MASTER_URL", "local[*]")

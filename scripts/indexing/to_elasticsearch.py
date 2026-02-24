@@ -18,6 +18,7 @@ from config.settings import (
     ELASTICSEARCH_PORT,
     ELASTICSEARCH_INDEX,
     ELASTICSEARCH_NEWS_INDEX,
+    ELASTICSEARCH_PREDICTIONS_INDEX,
 )
 
 
@@ -193,6 +194,54 @@ def index_news(es: Elasticsearch) -> None:
             logger.error(f"Error: {error}")
 
 
+def create_predictions_index(es: Elasticsearch, index_name: str) -> None:
+    """Create predictions index with mapping if it doesn't exist."""
+    if es.indices.exists(index=index_name):
+        es.indices.delete(index=index_name)
+        logger.info(f"Deleted existing index: {index_name}")
+
+    mapping = {
+        "mappings": {
+            "properties": {
+                "symbol": {"type": "keyword"},
+                "date": {"type": "date"},
+                "predicted_close": {"type": "float"},
+                "confidence_lower": {"type": "float"},
+                "confidence_upper": {"type": "float"},
+                "type": {"type": "keyword"},
+            }
+        }
+    }
+
+    es.indices.create(index=index_name, body=mapping)
+    logger.info(f"Created index: {index_name}")
+
+
+def index_predictions(es: Elasticsearch) -> None:
+    """Read ARIMA predictions parquet and index to Elasticsearch."""
+    parquet_path = USAGE_PATH / "predictions" / "arima_predictions.parquet"
+
+    if not parquet_path.exists():
+        logger.warning(f"Predictions data not found: {parquet_path}")
+        return
+
+    df = pd.read_parquet(parquet_path)
+    logger.info(f"Read {len(df)} prediction records from parquet")
+
+    for col in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            df[col] = df[col].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    create_predictions_index(es, ELASTICSEARCH_PREDICTIONS_INDEX)
+
+    success, errors = bulk(es, generate_actions(df, ELASTICSEARCH_PREDICTIONS_INDEX), raise_on_error=False)
+    logger.info(f"Indexed {success} prediction documents, {len(errors) if errors else 0} errors")
+
+    if errors:
+        for error in errors[:5]:
+            logger.error(f"Error: {error}")
+
+
 def main():
     """Main indexing function."""
     logger.info("Starting indexation to Elasticsearch")
@@ -208,6 +257,7 @@ def main():
 
     index_stocks(es)
     index_news(es)
+    index_predictions(es)
     logger.info("Indexation complete")
 
 
