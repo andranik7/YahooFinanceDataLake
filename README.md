@@ -182,11 +182,17 @@ Le sentiment des 30 derniers jours est moyenné pour projeter les jours futurs. 
 
 ## Dashboard Kibana
 
-Trois visualisations importées automatiquement :
+Visualisations importées automatiquement :
 
-1. **Évolution des cours** — prix de clôture par symbole sur 90 jours (`stock_analysis`)
-2. **Tableau des actualités** — news triées par date avec scores de sentiment (`stock_news`)
-3. **Prédictions SARIMAX** — cours réels + prédictions 30j + bandes de confiance 95% (`stock_predictions`)
+| Visualisation | Description | Index |
+|---------------|-------------|-------|
+| Évolution des cours | Prix de clôture par symbole sur 90 jours | `stock_analysis` |
+| Tableau des actualités | News triées par date avec scores de sentiment | `stock_news` |
+| Prédictions SARIMAX | Cours réels + prédictions 30j + bandes de confiance 95% | `stock_predictions` |
+| Top/Flop du jour | Classement des symboles par variation journalière (cours, volume) | `stock_analysis` |
+| Capitalisation par secteur | Treemap de la capitalisation boursière par secteur et symbole | `stock_analysis` |
+| Sentiment moyen par symbole | Bar chart horizontal du score de sentiment moyen par action | `stock_news` |
+| Distribution des sentiments | Donut chart positif / négatif / neutre | `stock_news` |
 
 ### Exporter le dashboard après modifications
 

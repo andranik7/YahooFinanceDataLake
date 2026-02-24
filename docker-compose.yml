@@ -60,6 +60,7 @@ services:
   # ============================================
   spark-master:
     image: apache/spark:3.5.0
+    user: "0"
     environment:
       - SPARK_MODE=master
     command: >
@@ -79,6 +80,7 @@ services:
 
   spark-worker:
     image: apache/spark:3.5.0
+    user: "0"
     environment:
       - SPARK_MASTER=spark://spark-master:7077
       - SPARK_WORKER_MEMORY=2g

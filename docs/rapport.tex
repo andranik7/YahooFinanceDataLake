@@ -268,7 +268,7 @@ Itérations maximales & 200 & Limite d'optimisation pour la convergence du modè
 
 \subsection{Intégration du sentiment}
 
-Les scores de sentiment VADER (décrits en section~5) sont agrégés en moyenne quotidienne par symbole et fournis au modèle comme variable exogène. Les jours sans actualité reçoivent un score neutre de 0.0. Pour les jours futurs, la moyenne du sentiment des 30 derniers jours est utilisée comme hypothèse de projection.
+Les scores de sentiment VADER (décrits en section~5) sont agrégés en moyenne quotidienne par symbole et fournis au modèle comme variable exogène.
 
 \begin{figure}[H]
 \centering
@@ -412,7 +412,7 @@ Les tâches d'ingestion s'exécutent en parallèle car elles sont indépendantes
 
 Les dashboards Kibana sont automatiquement importés au démarrage via le script \texttt{init\_kibana.sh}, qui charge le fichier \texttt{kibana/kibana\_saved\_objects.ndjson} via l'API REST. Ce fichier est versionné dans Git, assurant la reproductibilité des visualisations.
 
-Le dashboard principal présente trois visualisations :
+Le dashboard principal présente six visualisations :
 
 \begin{table}[H]
 \centering
@@ -423,12 +423,42 @@ Visualisation & Description \\
 Évolution des cours & Graphique en ligne du prix de clôture par symbole sur 90 jours (\texttt{stock\_analysis}) \\
 Actualités & Tableau des dernières news avec score et label de sentiment (\texttt{stock\_news}) \\
 Prédictions SARIMAX & Cours réels + prédictions 30 jours + bandes de confiance 95\% (\texttt{stock\_predictions}) \\
+Top/Flop du jour & Tableau classant les symboles par variation journalière avec cours et volume (\texttt{stock\_analysis}) \\
+Capitalisation par secteur & Treemap montrant la répartition de la capitalisation boursière par secteur et symbole (\texttt{stock\_analysis}) \\
+Distribution des sentiments & Donut chart de la répartition positive / négative / neutre des articles (\texttt{stock\_news}) \\
+Sentiment moyen par symbole & Bar chart horizontal comparant le score de sentiment moyen des 10 actions (\texttt{stock\_news}) \\
 \bottomrule
 \end{tabularx}
 \caption{Visualisations du dashboard Kibana}
 \end{table}
 
+\begin{figure}[H]
+\centering
+% \includegraphics[width=\textwidth]{topflop.png}
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : tableau Top/Flop classant les symboles par variation journalière}\vspace{2cm}}}
+\caption{Top/Flop du jour -- classement par variation}
+\end{figure}
 
+\begin{figure}[H]
+\centering
+% \includegraphics[width=\textwidth]{treemap.png}
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : treemap de la capitalisation boursière par secteur et symbole}\vspace{2cm}}}
+\caption{Capitalisation boursière par secteur}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+% \includegraphics[width=\textwidth]{sentiment_bar.png}
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : bar chart horizontal du sentiment moyen par symbole}\vspace{2cm}}}
+\caption{Sentiment moyen par symbole}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+% \includegraphics[width=\textwidth]{sentiment_donut.png}
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : donut chart de la distribution positive / négative / neutre}\vspace{2cm}}}
+\caption{Distribution des sentiments}
+\end{figure}
 
 %% ================================================================
 \section{Volumétrie et performance}
