@@ -27,7 +27,6 @@ def get_spark_session() -> SparkSession:
     return (
         SparkSession.builder
         .appName(SPARK_APP_NAME)
-        .master(SPARK_MASTER_URL)
         .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
         .getOrCreate()
     )

@@ -106,6 +106,7 @@ with DAG(
     end = EmptyOperator(task_id="end")
 
     # Define task dependencies
+    # To skip ingest_news for testing, set SKIP_NEWS=true in Airflow env
     start >> [ingest_stocks, ingest_news]
     [ingest_stocks, ingest_news] >> format_data
     format_data >> combine_data >> predict_arima >> index_data >> end

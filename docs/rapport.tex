@@ -3,7 +3,6 @@
 \usepackage[T1]{fontenc}
 \usepackage[french]{babel}
 \usepackage{graphicx}
-\usepackage{listings}
 \usepackage{xcolor}
 \usepackage{hyperref}
 \usepackage{geometry}
@@ -11,34 +10,20 @@
 \usepackage{titlesec}
 \usepackage{booktabs}
 \usepackage{float}
+\usepackage{amsmath}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, backgrounds}
 
 \geometry{margin=2.5cm}
 
-% Code styling
-\definecolor{codegreen}{rgb}{0,0.6,0}
-\definecolor{codegray}{rgb}{0.5,0.5,0.5}
-\definecolor{codepurple}{rgb}{0.58,0,0.82}
-\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
-
-\lstdefinestyle{mystyle}{
-    backgroundcolor=\color{backcolour},
-    commentstyle=\color{codegreen},
-    keywordstyle=\color{magenta},
-    numberstyle=\tiny\color{codegray},
-    stringstyle=\color{codepurple},
-    basicstyle=\ttfamily\footnotesize,
-    breakatwhitespace=false,
-    breaklines=true,
-    captionpos=b,
-    keepspaces=true,
-    numbers=left,
-    numbersep=5pt,
-    showspaces=false,
-    showstringspaces=false,
-    showtabs=false,
-    tabsize=2
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=blue,
+    citecolor=black
 }
-\lstset{style=mystyle}
 
 % Header/Footer
 \pagestyle{fancy}
@@ -49,493 +34,578 @@
 
 \title{
     \vspace{-1cm}
-    \textbf{Projet Big Data} \\
-    \large Yahoo Finance Data Lake \\
-    \vspace{0.5cm}
-    \normalsize Architecture de données pour l'analyse boursière
+    \textbf{Projet Big Data} \\[0.3cm]
+    \Large Yahoo Finance Data Lake \\[0.5cm]
+    \large Architecture de collecte, transformation, prédiction \\
+    et visualisation de données financières
 }
-\author{Étudiant}
+\author{}
 \date{\today}
 
 \begin{document}
 
 \maketitle
+\thispagestyle{empty}
+\vfill
 \tableofcontents
 \newpage
 
-% ============================================
+%% ================================================================
 \section{Introduction}
-% ============================================
+%% ================================================================
 
-Ce projet implémente une architecture Big Data complète pour l'analyse de données boursières. L'objectif est de collecter, transformer et exposer des données financières provenant de Yahoo Finance, en suivant les bonnes pratiques d'ingénierie des données.
+Ce projet met en place une architecture Big Data complète pour l'analyse de données boursières. Il couvre l'ensemble du cycle de vie de la donnée, depuis l'ingestion de sources externes jusqu'à la prédiction de cours via des modèles de séries temporelles, en passant par la transformation, l'enrichissement et la visualisation.
 
-\subsection{Objectifs}
-\begin{itemize}
-    \item Ingérer des données boursières et des actualités financières
-    \item Structurer les données dans un Data Lake en couches
-    \item Transformer et enrichir les données avec Apache Spark
-    \item Indexer les données dans Elasticsearch pour la recherche
-    \item Visualiser les données via des dashboards Kibana
-    \item Orchestrer le pipeline avec Apache Airflow
-\end{itemize}
+L'architecture repose sur un Data Lake organisé en couches successives, orchestré par Apache Airflow, et exposé au travers de dashboards Kibana. L'ensemble des services est conteneurisé via Docker Compose, garantissant une reproductibilité totale du déploiement.
 
-\subsection{Sources de données}
-\begin{enumerate}
-    \item \textbf{Yahoo Finance} (via \texttt{yfinance}) : cours boursiers historiques, volumes, informations entreprises
-    \item \textbf{Yahoo Finance News} : actualités financières par symbole
-\end{enumerate}
+Le projet suit dix symboles boursiers du marché américain : Apple (AAPL), Google (GOOGL), Microsoft (MSFT), Amazon (AMZN), Meta (META), Tesla (TSLA), NVIDIA (NVDA), JPMorgan (JPM), Visa (V) et Walmart (WMT). Ces valeurs couvrent plusieurs secteurs (technologie, finance, grande distribution) et offrent une diversité représentative du marché.
 
-% ============================================
-\section{Architecture}
-% ============================================
+%% ================================================================
+\section{Architecture générale}
+%% ================================================================
 
 \subsection{Vue d'ensemble}
 
-L'architecture suit le pattern Data Lake avec trois couches distinctes :
+L'architecture s'articule autour de cinq phases distinctes formant un pipeline de bout en bout. Les données brutes sont d'abord collectées depuis Yahoo Finance et l'API Finnhub, puis normalisées en format Parquet via Apache Spark. Une étape d'enrichissement croise les différentes sources, avant qu'un modèle SARIMAX ne génère des prédictions intégrant le sentiment des actualités. Enfin, l'ensemble est indexé dans Elasticsearch et visualisé dans Kibana.
 
 \begin{figure}[H]
 \centering
-\fbox{\parbox{0.9\textwidth}{
-\centering
-\textbf{Architecture Data Lake} \\[0.5cm]
-\texttt{Sources} $\rightarrow$ \texttt{Raw} $\rightarrow$ \texttt{Formatted} $\rightarrow$ \texttt{Usage} $\rightarrow$ \texttt{Exposition}
-}}
-\caption{Pipeline de données}
+\begin{tikzpicture}[
+    box/.style={
+        rectangle, rounded corners=3pt, draw=#1!50, fill=#1!8,
+        minimum width=2.6cm, minimum height=0.85cm, align=center,
+        font=\footnotesize\sffamily, line width=0.5pt
+    },
+    box/.default=gray,
+    arr/.style={-{Stealth[length=3pt]}, color=gray!50, semithick},
+    lbl/.style={font=\tiny\color{gray!60}}
+]
+
+% Placement fixe avec coordonnées absolues
+\node[box=blue]   at (0, 0)     (yahoo)     {Yahoo Finance};
+\node[box=blue]   at (4, 0)     (finnhub)   {Finnhub API};
+\node[box=teal]   at (2, -1.8)  (raw)       {Raw (JSON)};
+\node[box=teal]   at (2, -3.6)  (formatted) {Formatted (Parquet)};
+\node[box=teal]   at (2, -5.4)  (usage)     {Usage (Parquet)};
+\node[box=orange] at (2, -7.2)  (predict)   {Prédiction SARIMAX};
+\node[box=red]    at (2, -9.0)  (es)        {Elasticsearch};
+\node[box=red]    at (2, -10.8) (kibana)    {Kibana};
+
+% Flèches + labels à droite
+\draw[arr] (yahoo.south)   -- (raw.north -| yahoo.south);
+\draw[arr] (finnhub.south) -- (raw.north -| finnhub.south);
+\draw[arr] (raw)       -- (formatted) node[lbl, right, midway, xshift=3pt] {Spark -- normalisation, types, UTC};
+\draw[arr] (formatted) -- (usage)     node[lbl, right, midway, xshift=3pt] {Spark -- jointures, métriques dérivées};
+\draw[arr] (usage)     -- (predict)   node[lbl, right, midway, xshift=3pt] {SARIMAX + sentiment exogène};
+\draw[arr] (predict)   -- (es)        node[lbl, right, midway, xshift=3pt] {Bulk indexation (3 index)};
+\draw[arr] (es)        -- (kibana)    node[lbl, right, midway, xshift=3pt] {Dashboards automatiques};
+
+% Labels sources à gauche
+\node[lbl, left=3pt of yahoo.south, anchor=north east, yshift=-4pt] {cours, volumes};
+\node[lbl, right=3pt of finnhub.south, anchor=north west, yshift=-4pt] {news + sentiment};
+
+\end{tikzpicture}
+\caption{Pipeline de données de bout en bout}
 \end{figure}
 
-\subsection{Couches du Data Lake}
+\subsection{Organisation du Data Lake}
+
+Le Data Lake est structuré en trois couches principales, chacune répondant à un objectif précis dans le cycle de traitement des données.
 
 \begin{table}[H]
 \centering
-\begin{tabular}{@{}llp{6cm}@{}}
+\begin{tabularx}{\textwidth}{@{}llX@{}}
 \toprule
-\textbf{Couche} & \textbf{Format} & \textbf{Description} \\
+Couche & Format & Description \\
 \midrule
-Raw & JSON & Données brutes, partitionnées par date d'ingestion \\
-Formatted & Parquet & Données normalisées, types validés, timestamps UTC \\
-Usage & Parquet & Données enrichies, jointures effectuées \\
+Raw & JSON & Données brutes telles que reçues des APIs, partitionnées par date d'ingestion. Aucune transformation n'est appliquée à ce stade. \\
+Formatted & Parquet & Données normalisées avec validation des types, conversion des timestamps en UTC et compression Snappy. \\
+Usage & Parquet & Données enrichies résultant des jointures entre sources (cours, entreprises, actualités) et des métriques dérivées. \\
 \bottomrule
-\end{tabular}
-\caption{Organisation du Data Lake}
+\end{tabularx}
+\caption{Couches du Data Lake}
 \end{table}
+
+Les chemins de stockage suivent une convention stricte. Les données brutes Yahoo Finance sont stockées dans \texttt{data/raw/yahoo\_finance/}, les actualités dans \texttt{data/raw/news/}. Après transformation, les fichiers Parquet sont organisés dans \texttt{data/formatted/} puis \texttt{data/usage/}. Les prédictions sont écrites dans \texttt{data/usage/predictions/}.
 
 \subsection{Stack technique}
 
 \begin{table}[H]
 \centering
-\begin{tabular}{@{}lll@{}}
+\begin{tabularx}{\textwidth}{@{}llX@{}}
 \toprule
-\textbf{Composant} & \textbf{Technologie} & \textbf{Rôle} \\
+Composant & Technologie & Rôle \\
 \midrule
-Orchestration & Apache Airflow 2.7.3 & Planification et exécution des tâches \\
-Transformation & Apache Spark 3.5.0 & Traitement distribué des données \\
-Indexation & Elasticsearch 8.11.0 & Moteur de recherche et analytics \\
-Visualisation & Kibana 8.11.0 & Dashboards interactifs \\
-Base métadonnées & PostgreSQL 15 & Backend Airflow \\
-Runtime Java & OpenJDK 11 & Requis pour Spark dans Airflow \\
-Conteneurisation & Docker Compose & Déploiement des services \\
+Orchestration & Apache Airflow 2.7.3 & Planification et exécution séquentielle des tâches du pipeline \\
+Transformation & Apache Spark 3.5.0 & Traitement distribué pour la normalisation et les jointures \\
+Prédiction & statsmodels (SARIMAX) & Modélisation de séries temporelles avec variables exogènes \\
+Analyse de sentiment & VADER 3.3.2 & Analyse automatique du sentiment des actualités financières \\
+Indexation & Elasticsearch 8.11.0 & Moteur de recherche et d'agrégation pour l'exposition des données \\
+Visualisation & Kibana 8.11.0 & Dashboards interactifs avec import automatique \\
+Base métadonnées & PostgreSQL 15 & Backend pour les métadonnées Airflow \\
+Runtime Java & OpenJDK 11 & Environnement d'exécution requis par Apache Spark \\
+Conteneurisation & Docker Compose & Déploiement et orchestration de l'infrastructure \\
 \bottomrule
-\end{tabular}
-\caption{Stack technique}
+\end{tabularx}
+\caption{Stack technique du projet}
 \end{table}
 
-% ============================================
-\section{Implémentation}
-% ============================================
+%% ================================================================
+\section{Infrastructure Docker}
+%% ================================================================
 
-\subsection{Structure du projet}
-
-\begin{lstlisting}[language=bash, caption=Arborescence du projet]
-YahooFinance/
-├── airflow/
-│   └── dags/
-│       └── yahoo_finance_pipeline.py  # DAG principal
-├── config/
-│   └── settings.py        # Configuration centralisee
-├── data/
-│   ├── raw/               # Donnees brutes (JSON)
-│   ├── formatted/         # Donnees normalisees (Parquet)
-│   └── usage/             # Donnees enrichies (Parquet)
-├── scripts/
-│   ├── ingestion/         # Scripts d'ingestion
-│   ├── formatting/        # Transformation Spark
-│   ├── combination/       # Jointure des sources
-│   └── indexing/          # Indexation Elasticsearch
-├── docker-compose.yml
-├── Dockerfile.airflow     # Image Airflow avec Java/Spark
-├── pyproject.toml
-└── README.md
-\end{lstlisting}
-
-\subsection{Pipeline de données}
-
-Le pipeline se décompose en 4 étapes séquentielles :
-
-\subsubsection{1. Ingestion}
-
-L'ingestion collecte les données depuis Yahoo Finance via la bibliothèque \texttt{yfinance}.
-
-\textbf{Données collectées :}
-\begin{itemize}
-    \item \textbf{Stocks} : historique 12 mois (Open, High, Low, Close, Volume)
-    \item \textbf{Company Info} : nom, secteur, industrie, capitalisation
-    \item \textbf{News} : titre, éditeur, date de publication, lien
-\end{itemize}
-
-\textbf{Symboles suivis :} AAPL, GOOGL, MSFT, AMZN, META, TSLA, NVDA, JPM, V, WMT
-
-\begin{lstlisting}[language=Python, caption=Extrait ingestion stocks]
-def fetch_stock_data(symbol: str, period: str = "1y") -> list[dict]:
-    ticker = yf.Ticker(symbol)
-    hist = ticker.history(period=period)
-
-    records = []
-    for date, row in hist.iterrows():
-        records.append({
-            "symbol": symbol,
-            "date": date.strftime("%Y-%m-%d"),
-            "open": float(row["Open"]),
-            "high": float(row["High"]),
-            "low": float(row["Low"]),
-            "close": float(row["Close"]),
-            "volume": int(row["Volume"]),
-            "fetched_at": datetime.now(timezone.utc).isoformat(),
-        })
-    return records
-\end{lstlisting}
-
-\subsubsection{2. Formatting (Transformation)}
-
-Apache Spark transforme les fichiers JSON en format Parquet avec normalisation :
-
-\begin{itemize}
-    \item Conversion des types (Double, Long, Timestamp)
-    \item Normalisation des dates en UTC
-    \item Validation du schéma
-\end{itemize}
-
-\begin{lstlisting}[language=Python, caption=Transformation Spark]
-df_normalized = (
-    df.withColumn("open", col("open").cast(DoubleType()))
-    .withColumn("high", col("high").cast(DoubleType()))
-    .withColumn("low", col("low").cast(DoubleType()))
-    .withColumn("close", col("close").cast(DoubleType()))
-    .withColumn("volume", col("volume").cast(LongType()))
-    .withColumn("fetched_at_utc", to_utc_timestamp(col("fetched_at"), "UTC"))
-)
-df_normalized.write.mode("overwrite").parquet(output_path)
-\end{lstlisting}
-
-\subsubsection{3. Combination (Enrichissement)}
-
-Cette étape joint les différentes sources pour créer un dataset enrichi :
-
-\begin{lstlisting}[language=Python, caption=Jointure des sources]
-# Agregation des news par symbole
-news_agg = news_df.groupBy("symbol").agg(
-    count("*").alias("news_count"),
-    spark_max("pub_date_utc").alias("latest_news_date")
-)
-
-# Jointure stocks + company info
-stocks_enriched = stocks_df.join(
-    company_df.select("symbol", "name", "sector", "industry", "market_cap"),
-    on="symbol", how="left"
-)
-
-# Jointure avec news
-final_df = stocks_enriched.join(news_agg, on="symbol", how="left")
-
-# Metriques derivees
-final_df = final_df.withColumn(
-    "daily_range", col("high") - col("low")
-).withColumn(
-    "daily_change_pct", ((col("close") - col("open")) / col("open")) * 100
-)
-\end{lstlisting}
-
-\subsubsection{4. Indexation}
-
-Les données enrichies sont indexées dans Elasticsearch pour la recherche et la visualisation.
-
-\textbf{Index créés :}
-\begin{itemize}
-    \item \texttt{stock\_analysis} : données boursières enrichies (1280 documents)
-    \item \texttt{stock\_news} : actualités financières (83 documents)
-\end{itemize}
-
-\begin{lstlisting}[language=Python, caption=Mapping Elasticsearch]
-mapping = {
-    "mappings": {
-        "properties": {
-            "symbol": {"type": "keyword"},
-            "name": {"type": "text"},
-            "sector": {"type": "keyword"},
-            "date": {"type": "date"},
-            "open": {"type": "float"},
-            "close": {"type": "float"},
-            "volume": {"type": "long"},
-            "daily_change_pct": {"type": "float"},
-        }
-    }
-}
-\end{lstlisting}
-
-% ============================================
-\section{Déploiement}
-% ============================================
-
-\subsection{Prérequis}
-
-\begin{itemize}
-    \item Docker et Docker Compose
-    \item Python 3.10+ (optionnel, pour développement local)
-    \item Poetry (optionnel, gestionnaire de dépendances)
-\end{itemize}
-
-\subsection{Installation}
-
-\begin{lstlisting}[language=bash, caption=Commandes d'installation]
-# Cloner le projet
-git clone <repository>
-cd YahooFinance
-
-# Construire l'image Airflow (avec Java pour Spark)
-docker-compose build
-
-# Demarrer les services Docker
-docker-compose up -d
-
-# Configurer la connexion Spark dans Airflow
-docker-compose exec airflow airflow connections add spark_default \
-    --conn-type spark --conn-host spark://spark-master --conn-port 7077
-\end{lstlisting}
-
-\textbf{Note :} L'image Airflow custom (\texttt{Dockerfile.airflow}) inclut Java 11 et PySpark pour permettre la soumission de jobs Spark via \texttt{SparkSubmitOperator}.
-
-\subsection{Services exposés}
+L'ensemble de l'infrastructure est déployé via Docker Compose. Six services collaborent sur un réseau bridge dédié (\texttt{bigdata-network}).
 
 \begin{table}[H]
 \centering
-\begin{tabular}{@{}llll@{}}
+\begin{tabularx}{\textwidth}{@{}lllX@{}}
 \toprule
-\textbf{Service} & \textbf{URL} & \textbf{Port} & \textbf{Credentials} \\
+Service & Version & Port & Rôle \\
 \midrule
-Airflow & \url{http://localhost:8080} & 8080 & admin/admin \\
-Spark UI & \url{http://localhost:8081} & 8081 & - \\
-Elasticsearch & \url{http://localhost:9200} & 9200 & - \\
-Kibana & \url{http://localhost:5601} & 5601 & - \\
+Airflow & 2.7.3 & 8080 & Orchestration du pipeline, interface web d'administration \\
+PostgreSQL & 15 & 5432 & Base de métadonnées Airflow (LocalExecutor) \\
+Spark Master & 3.5.0 & 7077 / 8081 & Coordinateur du cluster Spark \\
+Spark Worker & 3.5.0 & -- & Nœud de calcul (2 Go de mémoire alloués) \\
+Elasticsearch & 8.11.0 & 9200 & Indexation et recherche (512 Mo -- 1 Go de heap) \\
+Kibana & 8.11.0 & 5601 & Interface de visualisation connectée à Elasticsearch \\
 \bottomrule
-\end{tabular}
-\caption{Services et URLs}
+\end{tabularx}
+\caption{Services Docker déployés}
 \end{table}
 
-\subsection{Orchestration Airflow}
+L'image Airflow est construite à partir d'un Dockerfile personnalisé (\texttt{Dockerfile.airflow}) basé sur \texttt{apache/airflow:2.7.3-python3.10}. Cette image intègre OpenJDK 11 pour l'exécution de Spark, avec une détection dynamique de l'architecture processeur (ARM64 ou AMD64) assurant la compatibilité sur différentes plateformes. Les dépendances Python installées incluent \texttt{yfinance}, \texttt{pandas}, \texttt{pyarrow}, \texttt{pyspark}, \texttt{elasticsearch}, \texttt{vaderSentiment} et \texttt{statsmodels}.
 
-Le pipeline est orchestré via un DAG Airflow qui enchaîne automatiquement toutes les étapes.
-
-\subsubsection{DAG : yahoo\_finance\_pipeline}
+Les volumes Docker montent les répertoires du projet (DAGs, scripts, données, configuration) dans le conteneur Airflow, permettant un développement itératif sans reconstruction de l'image. Le volume \texttt{elasticsearch-data} assure la persistance des index entre les redémarrages.
 
 \begin{figure}[H]
 \centering
-\fbox{\parbox{0.9\textwidth}{
+% \includegraphics[width=\textwidth]{images/docker-ps.png}
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : sortie de \texttt{docker-compose ps} montrant les 6 services actifs}\vspace{2cm}}}
+\caption{Services Docker en cours d'exécution}
+\end{figure}
+
+%% ================================================================
+\section{Sources de données}
+%% ================================================================
+
+\subsection{Cours boursiers -- Yahoo Finance}
+
+La bibliothèque \texttt{yfinance} permet de récupérer l'historique des cours sur cinq années pour chaque symbole. Les données incluent les prix d'ouverture, de clôture, les extremums journaliers et le volume échangé. En complément, les informations statiques de chaque entreprise (nom, secteur, industrie, capitalisation boursière) sont collectées.
+
+L'historique de cinq ans représente environ 1\,260 jours de trading par symbole, soit un total d'environ 12\,600 enregistrements pour les dix symboles suivis. Les données sont sauvegardées en JSON, partitionnées par date d'ingestion.
+
+\subsection{Actualités financières -- Finnhub}
+
+L'API Finnhub fournit les actualités financières associées à chaque symbole. L'ingestion s'effectue mois par mois afin de contourner les limites de pagination de l'API : pour chaque symbole, douze appels sont effectués (un par mois), soit 120 appels au total. Un délai de 1,1 seconde entre chaque requête respecte la limite de 60 appels par minute du tier gratuit.
+
+\begin{table}[H]
 \centering
-\texttt{start} $\rightarrow$ \texttt{[ingest\_stocks, ingest\_news]} $\rightarrow$ \texttt{format\_data} $\rightarrow$ \texttt{combine\_data} $\rightarrow$ \texttt{index\_data} $\rightarrow$ \texttt{end}
+\begin{tabular}{@{}lr@{}}
+\toprule
+Paramètre & Valeur \\
+\midrule
+Période couverte & 12 mois \\
+Symboles suivis & 10 \\
+Appels API totaux & 120 \\
+Délai entre appels & 1,1 seconde \\
+Durée totale d'ingestion & environ 3 minutes \\
+Volume collecté & environ 21\,000 articles \\
+\bottomrule
+\end{tabular}
+\caption{Paramètres d'ingestion des actualités Finnhub}
+\end{table}
+
+Chaque article est dédupliqué via son identifiant UUID fourni par l'API. Les champs collectés incluent le titre, le résumé, l'éditeur, la catégorie, la date de publication et l'URL.
+
+%% ================================================================
+\section{Analyse de sentiment}
+%% ================================================================
+
+L'analyse de sentiment est réalisée lors de l'ingestion des actualités à l'aide de VADER (Valence Aware Dictionary and sEntiment Reasoner). VADER est un analyseur lexical conçu pour les textes courts, particulièrement adapté aux titres et résumés d'articles financiers.
+
+Pour chaque article, le texte du titre et du résumé est concaténé puis soumis à l'analyseur. VADER produit un score composite compris entre $-1.0$ (très négatif) et $+1.0$ (très positif). Ce score est ensuite classifié selon les seuils suivants :
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+Label & Condition \\
+\midrule
+Positif & score $\geq 0.05$ \\
+Négatif & score $\leq -0.05$ \\
+Neutre & $-0.05 <$ score $< 0.05$ \\
+\bottomrule
+\end{tabular}
+\caption{Seuils de classification du sentiment VADER}
+\end{table}
+
+Le score et le label sont stockés avec chaque article dans la couche Raw puis propagés jusqu'à Elasticsearch, où ils sont disponibles pour la visualisation et, surtout, pour alimenter le modèle de prédiction en tant que variable exogène.
+
+\begin{figure}[H]
+\centering
+% \includegraphics[width=\textwidth]{images/kibana-news-sentiment.png}
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : tableau Kibana des actualités avec scores et labels de sentiment}\vspace{2cm}}}
+\caption{Actualités financières avec analyse de sentiment dans Kibana}
+\end{figure}
+
+%% ================================================================
+\section{Transformation et enrichissement}
+%% ================================================================
+
+\subsection{Normalisation (Formatting)}
+
+La première étape de transformation convertit les fichiers JSON bruts en format Parquet via Apache Spark. Le traitement inclut le casting des types numériques (Double pour les prix, Long pour les volumes et la capitalisation), la conversion de tous les timestamps en UTC, et la validation du schéma. Le format Parquet, avec sa structure colonnaire et sa compression Snappy, offre des performances de lecture significativement supérieures au JSON pour les opérations analytiques.
+
+Les jobs Spark sont soumis au cluster via \texttt{spark-submit} en mode client depuis le conteneur Airflow.
+
+\begin{figure}[H]
+\centering
+% \includegraphics[width=\textwidth]{images/spark-ui.png}
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : interface Spark UI montrant les jobs de transformation}\vspace{2cm}}}
+\caption{Spark UI -- Jobs de transformation exécutés}
+\end{figure}
+
+\subsection{Enrichissement (Combination)}
+
+L'enrichissement croise les trois sources de données par une série de jointures gauches sur le champ \texttt{symbol}. Les cours boursiers sont d'abord joints avec les informations d'entreprise (nom, secteur, industrie, capitalisation), puis avec une agrégation des actualités par symbole (nombre total d'articles et date du dernier article).
+
+Deux métriques dérivées sont calculées à cette étape. L'amplitude journalière (\texttt{daily\_range}) correspond à la différence entre le prix le plus haut et le plus bas de la journée. La variation journalière (\texttt{daily\_change\_pct}) mesure l'écart entre le prix de clôture et d'ouverture, exprimé en pourcentage.
+
+Le dataset enrichi final est écrit dans \texttt{data/usage/stock\_analysis/enriched\_stocks.parquet} et constitue la base pour la phase de prédiction et l'indexation.
+
+%% ================================================================
+\section{Prédiction des cours}
+%% ================================================================
+
+\subsection{Approche retenue}
+
+Le projet intègre une phase de machine learning pour la prédiction des cours financiers. Le modèle retenu est SARIMAX (Seasonal AutoRegressive Integrated Moving Average with eXogenous variables), qui combine l'analyse de séries temporelles avec une variable externe : le sentiment des actualités financières. Ce choix permet de croiser deux dimensions complémentaires -- la dynamique historique des prix et le contexte médiatique -- pour produire des prédictions plus contextualisées.
+
+\subsection{Modèle SARIMAX}
+
+Le modèle SARIMAX étend le modèle ARIMA classique en ajoutant une composante saisonnière et la possibilité d'intégrer des variables exogènes. La formulation mathématique s'exprime comme suit :
+
+\begin{equation}
+\phi(B)\Phi(B^s)(1-B)^d(1-B^s)^D y_t = \theta(B)\Theta(B^s)\epsilon_t + \beta x_t
+\end{equation}
+
+où $B$ est l'opérateur de retard, $s$ la période saisonnière, $\phi$ et $\Phi$ les polynômes autorégressifs, $\theta$ et $\Theta$ les polynômes de moyenne mobile, $d$ et $D$ les ordres de différenciation, $x_t$ la variable exogène (sentiment) et $\beta$ son coefficient.
+
+\subsection{Paramétrage}
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{@{}lrX@{}}
+\toprule
+Paramètre & Valeur & Signification \\
+\midrule
+Ordre ARIMA & $(2, 1, 2)$ & 2 termes autorégressifs, 1 différenciation, 2 termes de moyenne mobile \\
+Ordre saisonnier & $(1, 1, 1, 5)$ & Composante saisonnière hebdomadaire (5 jours ouvrés) \\
+Variable exogène & Sentiment & Score de sentiment agrégé quotidien par symbole \\
+Période d'entraînement & 252 jours & Dernière année de trading (environ 252 jours ouvrés) \\
+Horizon de prédiction & 30 jours & 30 jours ouvrés de prédiction \\
+Intervalle de confiance & 95\% & Bandes de confiance à $\alpha = 0.05$ \\
+Itérations maximales & 200 & Limite d'optimisation pour la convergence du modèle \\
+\bottomrule
+\end{tabularx}
+\caption{Paramètres du modèle SARIMAX}
+\end{table}
+
+\subsection{Intégration du sentiment}
+
+Le sentiment des actualités est agrégé quotidiennement par symbole : pour chaque jour et chaque action, la moyenne des scores de sentiment de tous les articles publiés est calculée. Les jours sans actualité reçoivent un score neutre de 0.0. Cette série temporelle de sentiment est alignée avec les dates de trading et fournie au modèle comme variable exogène.
+
+Pour les jours futurs (période de prédiction), le modèle utilise la moyenne du sentiment des 30 derniers jours comme hypothèse de projection. Cette approche suppose une stabilité du climat médiatique à court terme.
+
+L'impact du sentiment varie selon les symboles. Les entreprises bénéficiant d'une couverture médiatique plus positive (par exemple Amazon avec un score moyen de 0.41) voient leurs prédictions ajustées à la hausse, tandis que celles avec un sentiment proche de la neutralité (par exemple Tesla avec 0.10) produisent des prédictions plus conservatrices.
+
+\begin{figure}[H]
+\centering
+% \includegraphics[width=\textwidth]{images/kibana-predictions.png}
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : graphique Kibana montrant les cours réels, les prédictions SARIMAX et les bandes de confiance}\vspace{2cm}}}
+\caption{Cours réels et prédictions SARIMAX avec bandes de confiance à 95\%}
+\end{figure}
+
+\subsection{Sortie du modèle}
+
+Le script de prédiction produit un fichier Parquet contenant à la fois les 90 derniers jours de données réelles (pour assurer la continuité visuelle sur les graphiques) et les 30 jours de prédictions. Chaque enregistrement inclut le symbole, la date, le cours prédit, les bornes de l'intervalle de confiance, le score de sentiment utilisé et un champ \texttt{type} distinguant les données réelles (\texttt{actual}) des prédictions (\texttt{forecast}).
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{@{}llX@{}}
+\toprule
+Champ & Type & Description \\
+\midrule
+symbol & keyword & Symbole boursier \\
+date & date & Date de la valeur \\
+predicted\_close & float & Cours prédit ou cours réel pour les données historiques \\
+confidence\_lower & float & Borne inférieure de l'intervalle de confiance à 95\% \\
+confidence\_upper & float & Borne supérieure de l'intervalle de confiance à 95\% \\
+sentiment\_score & float & Score de sentiment utilisé ($-1.0$ à $+1.0$) \\
+type & keyword & \texttt{actual} (historique) ou \texttt{forecast} (prédiction) \\
+\bottomrule
+\end{tabularx}
+\caption{Schéma de sortie des prédictions}
+\end{table}
+
+%% ================================================================
+\section{Indexation Elasticsearch}
+%% ================================================================
+
+Les données sont exposées via trois index Elasticsearch, chacun répondant à un besoin spécifique de consultation et de visualisation.
+
+\subsection{Index stock\_analysis}
+
+Cet index contient les données boursières enrichies. Chaque document correspond à un jour de trading pour un symbole donné, identifié par la clé \texttt{symbol\_date}. L'indexation est incrémentale : les nouvelles exécutions du pipeline mettent à jour les documents existants sans supprimer l'historique.
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{@{}llX@{}}
+\toprule
+Champ & Type & Description \\
+\midrule
+symbol & keyword & Symbole boursier \\
+name & text & Nom de l'entreprise \\
+sector, industry & keyword & Secteur et industrie \\
+date & date & Date du cours \\
+open, high, low, close & float & Prix d'ouverture, plus haut, plus bas, clôture \\
+volume & long & Volume échangé \\
+market\_cap & long & Capitalisation boursière \\
+daily\_range & float & Amplitude journalière (high $-$ low) \\
+daily\_change\_pct & float & Variation journalière en pourcentage \\
+news\_count & integer & Nombre d'articles associés au symbole \\
+latest\_news\_date & date & Date du dernier article \\
+\bottomrule
+\end{tabularx}
+\caption{Mapping de l'index stock\_analysis (environ 12\,800 documents)}
+\end{table}
+
+\subsection{Index stock\_news}
+
+Cet index stocke les actualités financières avec leur analyse de sentiment. La recherche plein texte est activée sur les champs titre et résumé, permettant des requêtes par mots-clés depuis Kibana. L'identifiant de chaque document est l'UUID fourni par l'API Finnhub, garantissant la déduplication.
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{@{}llX@{}}
+\toprule
+Champ & Type & Description \\
+\midrule
+symbol & keyword & Symbole associé \\
+title & text & Titre de l'article (recherche plein texte) \\
+summary & text & Résumé de l'article (recherche plein texte) \\
+provider & keyword & Éditeur de l'article \\
+category & keyword & Catégorie (company, market, etc.) \\
+pub\_date\_utc & date & Date de publication en UTC \\
+sentiment\_score & float & Score de sentiment VADER ($-1.0$ à $+1.0$) \\
+sentiment\_label & keyword & Classification (positive, negative, neutral) \\
+\bottomrule
+\end{tabularx}
+\caption{Mapping de l'index stock\_news (environ 21\,000 documents)}
+\end{table}
+
+\subsection{Index stock\_predictions}
+
+Cet index contient les prédictions SARIMAX et les données historiques récentes servant de référence visuelle. Contrairement aux deux autres index, celui-ci est recréé intégralement à chaque exécution du pipeline : l'index existant est supprimé puis reconstruit avec les nouvelles prédictions. Ce choix est motivé par le fait que les prédictions doivent être recalculées à chaque mise à jour des données.
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{@{}llX@{}}
+\toprule
+Champ & Type & Description \\
+\midrule
+symbol & keyword & Symbole boursier \\
+date & date & Date de la valeur \\
+predicted\_close & float & Cours prédit ou réel \\
+confidence\_lower & float & Borne inférieure de l'intervalle de confiance \\
+confidence\_upper & float & Borne supérieure de l'intervalle de confiance \\
+sentiment\_score & float & Score de sentiment utilisé pour la prédiction \\
+type & keyword & \texttt{actual} ou \texttt{forecast} \\
+\bottomrule
+\end{tabularx}
+\caption{Mapping de l'index stock\_predictions (environ 1\,200 documents)}
+\end{table}
+
+%% ================================================================
+\section{Orchestration Airflow}
+%% ================================================================
+
+L'ensemble du pipeline est orchestré par un DAG (Directed Acyclic Graph) Airflow planifié pour une exécution quotidienne. Le DAG enchaîne six tâches, certaines pouvant s'exécuter en parallèle.
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.95\textwidth}{
+\centering
+\vspace{0.3cm}
+\texttt{start} $\rightarrow$ \texttt{[ingest\_stocks $\|$ ingest\_news]} $\rightarrow$ \texttt{format\_data} $\rightarrow$ \texttt{combine\_data} $\rightarrow$ \texttt{predict\_arima} $\rightarrow$ \texttt{index\_data} $\rightarrow$ \texttt{end}
+\vspace{0.3cm}
 }}
-\caption{Flux du DAG Airflow}
+\caption{Structure du DAG \texttt{yahoo\_finance\_pipeline}}
 \end{figure}
 
 \begin{table}[H]
 \centering
-\begin{tabular}{@{}lll@{}}
+\begin{tabularx}{\textwidth}{@{}llX@{}}
 \toprule
-\textbf{Task} & \textbf{Opérateur} & \textbf{Description} \\
+Tâche & Opérateur & Description \\
 \midrule
-ingest\_stocks & PythonOperator & Collecte cours + infos entreprises \\
-ingest\_news & PythonOperator & Collecte actualités financières \\
-format\_data & SparkSubmitOperator & Conversion JSON → Parquet \\
-combine\_data & SparkSubmitOperator & Jointure + métriques dérivées \\
-index\_data & PythonOperator & Indexation Elasticsearch \\
+ingest\_stocks & PythonOperator & Collecte des cours sur 5 ans et des informations d'entreprise via yfinance \\
+ingest\_news & PythonOperator & Collecte de 12 mois d'actualités via Finnhub avec analyse de sentiment VADER \\
+format\_data & BashOperator & Soumission Spark pour la conversion JSON vers Parquet \\
+combine\_data & BashOperator & Soumission Spark pour les jointures et le calcul des métriques \\
+predict\_arima & PythonOperator & Exécution du modèle SARIMAX avec sentiment pour chaque symbole \\
+index\_data & PythonOperator & Indexation bulk dans les trois index Elasticsearch \\
 \bottomrule
-\end{tabular}
-\caption{Tasks du DAG}
+\end{tabularx}
+\caption{Tâches du DAG Airflow}
 \end{table}
 
-\begin{lstlisting}[language=Python, caption=Configuration SparkSubmitOperator]
-format_data = SparkSubmitOperator(
-    task_id="format_data",
-    application="/opt/airflow/scripts/formatting/format_to_parquet.py",
-    conn_id="spark_default",
-    deploy_mode="client",
-    verbose=True,
-    conf={"spark.master": "spark://spark-master:7077"},
-)
-\end{lstlisting}
+Les tâches d'ingestion (stocks et news) s'exécutent en parallèle car elles sont indépendantes. Les tâches Spark sont soumises via \texttt{spark-submit} en mode client depuis le conteneur Airflow vers le cluster Spark. Le pipeline complet s'exécute en environ 6 à 7 minutes.
 
-\textbf{Exécution :}
-\begin{enumerate}
-    \item Accéder à Airflow : \url{http://localhost:8080} (admin/admin)
-    \item Activer le DAG \texttt{yahoo\_finance\_pipeline}
-    \item Déclencher manuellement avec "Trigger DAG" ou attendre l'exécution planifiée (@daily)
-\end{enumerate}
+Le DAG est configuré avec une politique de reprise automatique : chaque tâche dispose d'une tentative de réessai après un délai de 5 minutes en cas d'échec. L'indexation est incrémentale pour les cours et les actualités (mise à jour par identifiant unique), tandis que les prédictions sont recalculées intégralement à chaque exécution.
 
-\textbf{Indexation incrémentale :} Le pipeline ajoute les nouvelles données sans supprimer l'historique existant. Les documents sont mis à jour via leur identifiant unique (\texttt{symbol\_date} pour les stocks, \texttt{uuid} pour les news).
+\begin{figure}[H]
+\centering
+% \includegraphics[width=\textwidth]{images/airflow-dag.png}
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : vue du DAG dans l'interface Airflow montrant le graphe des tâches}\vspace{2cm}}}
+\caption{DAG \texttt{yahoo\_finance\_pipeline} dans l'interface Airflow}
+\end{figure}
 
-\subsection{Exécution manuelle (optionnel)}
+\begin{figure}[H]
+\centering
+% \includegraphics[width=\textwidth]{images/airflow-dag-success.png}
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : exécution réussie du DAG avec toutes les tâches en vert}\vspace{2cm}}}
+\caption{Exécution réussie du pipeline complet}
+\end{figure}
 
-Pour exécuter les étapes individuellement en local :
+%% ================================================================
+\section{Visualisation Kibana}
+%% ================================================================
 
-\begin{lstlisting}[language=bash, caption=Execution manuelle du pipeline]
-# 1. Ingestion des donnees Yahoo Finance
-poetry run ingest-stocks
+Les dashboards Kibana sont automatiquement importés au démarrage du projet. Un script d'initialisation (\texttt{init\_kibana.sh}), exécuté par Airflow après un délai de 30 secondes (temps nécessaire au démarrage de Kibana), importe les objets sauvegardés depuis le fichier \texttt{kibana/kibana\_saved\_objects.ndjson} via l'API REST de Kibana.
 
-# 2. Ingestion des news
-poetry run ingest-news
+Le dashboard principal, intitulé ``Cours des actions US'', présente trois visualisations complémentaires.
 
-# 3. Transformation JSON -> Parquet
-poetry run format-data
+La première est un graphique en ligne montrant l'évolution du prix de clôture pour chaque symbole sur les 90 derniers jours, à partir de l'index \texttt{stock\_analysis}. Les courbes sont différenciées par couleur et permettent de comparer visuellement les performances des différentes actions.
 
-# 4. Jointure et enrichissement
-poetry run combine-data
+La deuxième est un tableau des dernières actualités, alimenté par l'index \texttt{stock\_news}. Il affiche le symbole, le titre, le résumé, le score de sentiment et le label de classification, triés par date de publication décroissante.
 
-# 5. Indexation Elasticsearch
-poetry run index-data
-\end{lstlisting}
+La troisième visualisation combine les cours réels et les prédictions SARIMAX sur un même graphique, à partir de l'index \texttt{stock\_predictions}. Trois couches se superposent : les cours réels des 90 derniers jours (lignes), les prédictions sur 30 jours (lignes) et les bandes de confiance à 95\% (zones). La plage temporelle du dashboard est étendue à \texttt{now+30d} pour inclure les dates futures des prédictions. Le champ \texttt{type} permet de filtrer les données réelles et les prédictions dans des couches distinctes.
 
-% ============================================
-\section{Résultats}
-% ============================================
+L'export des dashboards s'effectue via l'API Kibana et produit un fichier NDJSON versionné dans le dépôt Git, assurant la reproductibilité des visualisations lors du déploiement sur un nouvel environnement.
 
-\subsection{Volumétrie}
+\begin{figure}[H]
+\centering
+% \includegraphics[width=\textwidth]{images/kibana-dashboard-overview.png}
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : vue d'ensemble du dashboard Kibana avec les trois visualisations}\vspace{2cm}}}
+\caption{Dashboard principal Kibana -- vue d'ensemble}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+% \includegraphics[width=\textwidth]{images/kibana-stock-chart.png}
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : graphique en ligne de l'évolution des cours par symbole sur 90 jours}\vspace{2cm}}}
+\caption{Évolution des cours de clôture par symbole}
+\end{figure}
+
+%% ================================================================
+\section{Volumétrie et performance}
+%% ================================================================
 
 \begin{table}[H]
 \centering
 \begin{tabular}{@{}lrll@{}}
 \toprule
-\textbf{Dataset} & \textbf{Records} & \textbf{Période} & \textbf{Granularité} \\
+Dataset & Volume & Période & Granularité \\
 \midrule
-Stock prices & 1 280 & 12 mois & Journalière \\
-Company info & 10 & - & Par symbole \\
-News & 83 & Variable & Par article \\
-Enriched stocks & 1 280 & 12 mois & Journalière \\
+Cours boursiers & environ 12\,600 & 5 ans & Journalière \\
+Informations entreprises & 10 & -- & Par symbole \\
+Actualités financières & environ 21\,000 & 12 mois & Par article \\
+Données enrichies & environ 12\,800 & 5 ans & Journalière \\
+Prédictions & 1\,200 & 90 j. + 30 j. & Journalière \\
 \bottomrule
 \end{tabular}
 \caption{Volumétrie des données}
 \end{table}
 
-\subsection{Schéma des données enrichies}
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lr@{}}
+\toprule
+Étape & Durée approximative \\
+\midrule
+Ingestion des cours & 30 secondes \\
+Ingestion des actualités & 3 minutes \\
+Normalisation Spark & 1 minute \\
+Enrichissement Spark & 1 minute \\
+Prédiction SARIMAX & 30 secondes \\
+Indexation Elasticsearch & 1 minute \\
+\midrule
+Pipeline complet & 6 à 7 minutes \\
+\bottomrule
+\end{tabular}
+\caption{Temps d'exécution du pipeline}
+\end{table}
+
+%% ================================================================
+\section{Choix techniques}
+%% ================================================================
+
+\subsection{Format Parquet}
+
+Le choix du format Parquet pour les couches Formatted et Usage repose sur plusieurs avantages par rapport au JSON. Sa structure colonnaire permet de ne lire que les colonnes nécessaires à une requête, réduisant significativement les temps de lecture pour les opérations analytiques. La compression Snappy, appliquée par défaut, réduit l'espace disque sans pénaliser la vitesse de décompression. Enfin, le schéma est embarqué dans le fichier, éliminant les problèmes d'incohérence de types rencontrés avec le JSON.
+
+\subsection{Apache Spark}
+
+Spark est utilisé pour les étapes de transformation et d'enrichissement. Son API DataFrame offre une expressivité proche du SQL tout en bénéficiant de l'exécution distribuée. Le cluster Spark déployé en mode standalone (un master et un worker) est suffisant pour le volume de données du projet, tout en démontrant la capacité de passage à l'échelle.
+
+\subsection{SARIMAX avec sentiment}
+
+Le choix de SARIMAX plutôt qu'un modèle ARIMA simple ou un réseau de neurones (LSTM) résulte d'un compromis entre expressivité et interprétabilité. SARIMAX capture la saisonnalité hebdomadaire des marchés (cycle de 5 jours ouvrés) et permet d'intégrer le sentiment comme variable exogène de manière transparente. Contrairement à un LSTM, chaque composante du modèle est interprétable et les intervalles de confiance sont calculés analytiquement. Pour un projet académique, cette transparence méthodologique est préférable à une approche de type boîte noire.
+
+\subsection{Elasticsearch et Kibana}
+
+Elasticsearch fournit un moteur d'indexation performant avec des capacités d'agrégation en temps réel. La recherche plein texte sur les actualités, les agrégations temporelles sur les cours et la flexibilité du schéma (mapping dynamique ou explicite) en font un choix naturel pour la couche d'exposition. Kibana, intégré nativement, offre des visualisations interactives sans développement supplémentaire.
+
+%% ================================================================
+\section{Déploiement}
+%% ================================================================
+
+Le déploiement du projet se résume à trois commandes. Après avoir cloné le dépôt et configuré la clé API Finnhub dans le fichier \texttt{.env}, la construction des images Docker et le démarrage des services s'effectuent via \texttt{docker-compose build} puis \texttt{docker-compose up -d}. Les dashboards Kibana sont automatiquement importés au démarrage.
 
 \begin{table}[H]
 \centering
-\small
-\begin{tabular}{@{}llp{5cm}@{}}
+\begin{tabular}{@{}lll@{}}
 \toprule
-\textbf{Champ} & \textbf{Type} & \textbf{Description} \\
+Service & URL & Identifiants \\
 \midrule
-symbol & keyword & Symbole boursier (ex: AAPL) \\
-name & text & Nom de l'entreprise \\
-sector & keyword & Secteur d'activité \\
-industry & keyword & Industrie \\
-date & date & Date du cours \\
-open & float & Prix d'ouverture \\
-high & float & Prix le plus haut \\
-low & float & Prix le plus bas \\
-close & float & Prix de clôture \\
-volume & long & Volume échangé \\
-market\_cap & long & Capitalisation boursière \\
-daily\_range & float & Amplitude journalière (high - low) \\
-daily\_change\_pct & float & Variation journalière en \% \\
-news\_count & integer & Nombre d'articles associés \\
-latest\_news\_date & date & Date du dernier article \\
+Airflow & \url{http://localhost:8080} & admin / admin \\
+Spark UI & \url{http://localhost:8081} & -- \\
+Elasticsearch & \url{http://localhost:9200} & -- \\
+Kibana & \url{http://localhost:5601} & -- \\
 \bottomrule
 \end{tabular}
-\caption{Schéma du dataset enrichi}
+\caption{Accès aux services}
 \end{table}
 
-% ============================================
-\section{Visualisation Kibana}
-% ============================================
+Une fois les services démarrés, le DAG \texttt{yahoo\_finance\_pipeline} peut être activé et déclenché depuis l'interface Airflow. L'exécution quotidienne planifiée (\texttt{@daily}) maintient les données à jour automatiquement.
 
-\subsection{Configuration}
+\begin{figure}[H]
+\centering
+% \includegraphics[width=\textwidth]{images/elasticsearch-indices.png}
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : liste des index Elasticsearch avec le nombre de documents par index}\vspace{2cm}}}
+\caption{Index Elasticsearch après exécution du pipeline}
+\end{figure}
 
-Pour visualiser les données dans Kibana :
+L'arrêt des services s'effectue via \texttt{docker-compose down}. L'ajout du flag \texttt{-v} supprime les volumes persistants, entraînant la perte des données Elasticsearch. Dans ce cas, les dashboards sont réimportés automatiquement au redémarrage, mais les données doivent être réingérées via le pipeline Airflow.
 
-\begin{enumerate}
-    \item Accéder à Kibana : \url{http://localhost:5601}
-    \item Créer les Data Views :
-    \begin{itemize}
-        \item \texttt{stock\_analysis} avec timestamp \texttt{date}
-        \item \texttt{stock\_news} avec timestamp \texttt{pub\_date\_utc}
-    \end{itemize}
-    \item Créer les visualisations dans Lens
-\end{enumerate}
-
-\subsection{Visualisations recommandées}
-
-\begin{itemize}
-    \item \textbf{Line chart} : Évolution du prix de clôture par symbole
-    \item \textbf{Bar chart} : Volume par secteur
-    \item \textbf{Pie chart} : Répartition par secteur
-    \item \textbf{Data table} : Dernières news par symbole
-    \item \textbf{Metric} : Capitalisation totale
-\end{itemize}
-
-% ============================================
-\section{Choix techniques}
-% ============================================
-
-\subsection{Pourquoi Parquet ?}
-
-\begin{itemize}
-    \item Format colonnaire optimisé pour l'analytique
-    \item Compression efficace (snappy par défaut)
-    \item Support natif Spark et Pandas
-    \item Schéma embarqué dans le fichier
-\end{itemize}
-
-\subsection{Pourquoi Spark ?}
-
-\begin{itemize}
-    \item Traitement distribué scalable
-    \item API DataFrame familière
-    \item Intégration native avec Parquet
-    \item Mode local pour le développement
-\end{itemize}
-
-\subsection{Pourquoi Elasticsearch + Kibana ?}
-
-\begin{itemize}
-    \item Recherche full-text performante
-    \item Agrégations en temps réel
-    \item Kibana intégré pour la visualisation
-    \item API REST simple
-\end{itemize}
-
-% ============================================
-\section{Améliorations futures}
-% ============================================
-
-\begin{itemize}
-    \item Intégration de sources de données supplémentaires (Reuters, Bloomberg)
-    \item Alertes sur les variations de cours importantes
-    \item Machine Learning pour la prédiction de tendances
-    \item Analyse de sentiment sur les news
-    \item Scaling horizontal du cluster Spark
-\end{itemize}
-
-% ============================================
+%% ================================================================
 \section{Conclusion}
-% ============================================
+%% ================================================================
 
-Ce projet démontre la mise en place d'une architecture Big Data complète, de l'ingestion à la visualisation. L'utilisation de technologies modernes (Spark, Elasticsearch, Airflow) permet de créer un pipeline robuste et scalable pour l'analyse de données financières.
+Ce projet met en œuvre une architecture Big Data complète couvrant l'ensemble du cycle de vie de la donnée financière. Depuis l'ingestion de sources hétérogènes (API boursière et actualités) jusqu'à la prédiction de cours via un modèle SARIMAX alimenté par l'analyse de sentiment, chaque étape s'inscrit dans une chaîne de traitement cohérente et automatisée.
 
-Les principales réalisations sont :
-\begin{itemize}
-    \item Data Lake structuré en 3 couches (raw, formatted, usage)
-    \item Pipeline ETL complet avec transformations Spark
-    \item Orchestration automatisée via DAG Airflow avec SparkSubmitOperator
-    \item Indexation et visualisation via Elasticsearch/Kibana
-    \item Conteneurisation complète avec Docker Compose
-\end{itemize}
+L'architecture en couches du Data Lake (Raw, Formatted, Usage) assure la traçabilité et la qualité des données. L'orchestration Airflow garantit la reproductibilité et l'automatisation du pipeline. Le croisement entre l'analyse de séries temporelles et le traitement du langage naturel (sentiment des actualités) illustre la capacité à combiner des approches complémentaires pour enrichir les prédictions.
+
+L'ensemble est conteneurisé et déployable en une commande, avec des dashboards Kibana pré-configurés et importés automatiquement, rendant le projet immédiatement opérationnel sur tout environnement disposant de Docker.
 
 \end{document}
