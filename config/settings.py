@@ -43,7 +43,7 @@ NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
 
 # Elasticsearch
-ELASTICSEARCH_HOST = os.getenv("ELASTICSEARCH_HOST", "localhost")
+ELASTICSEARCH_HOST = os.getenv("ELASTICSEARCH_HOST", "elasticsearch")
 ELASTICSEARCH_PORT = int(os.getenv("ELASTICSEARCH_PORT", 9200))
 ELASTICSEARCH_INDEX = "stock_analysis"
 ELASTICSEARCH_NEWS_INDEX = "stock_news"
