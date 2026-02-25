@@ -73,6 +73,7 @@ services:
       - SPARK_MODE=master
     command: >
       bash -c "
+      umask 000 &&
       mkdir -p /opt/airflow/data/raw/stocks /opt/airflow/data/raw/news /opt/airflow/data/formatted/yahoo_finance/stocks /opt/airflow/data/formatted/yahoo_finance/news /opt/airflow/data/combined /opt/airflow/data/predictions &&
       chmod -R 777 /opt/airflow/data &&
       /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master"
@@ -95,6 +96,7 @@ services:
       - SPARK_WORKER_DIR=/tmp/spark-worker
     command: >
       bash -c "
+      umask 000 &&
       mkdir -p /opt/airflow/data/raw/stocks /opt/airflow/data/raw/news /opt/airflow/data/formatted/yahoo_finance/stocks /opt/airflow/data/formatted/yahoo_finance/news /opt/airflow/data/combined /opt/airflow/data/predictions &&
       chmod -R 777 /opt/airflow/data &&
       /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077 -d /tmp/spark-worker"

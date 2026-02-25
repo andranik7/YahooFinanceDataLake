@@ -5,7 +5,6 @@ Creates enriched dataset in the usage layer.
 
 import sys
 import shutil
-import tempfile
 from pathlib import Path
 
 from pyspark.sql import SparkSession
@@ -22,17 +21,14 @@ from config.settings import (
 )
 
 
-def write_parquet_safe(df, output_path: str) -> None:
-    """Write Parquet via a temp dir to avoid rename issues on Windows/WSL2 bind mounts."""
-    tmp_dir = tempfile.mkdtemp(prefix="spark_out_")
-    tmp_output = str(Path(tmp_dir) / "data.parquet")
-    try:
-        df.write.mode("overwrite").parquet(tmp_output)
-        final = Path(output_path)
-        shutil.rmtree(final, ignore_errors=True)
-        shutil.copytree(tmp_output, str(final), dirs_exist_ok=True)
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+def safe_rmtree(path: Path) -> None:
+    """Delete a directory tree before writing. Raises if deletion fails to prevent duplicate data."""
+    if path.exists():
+        try:
+            shutil.rmtree(path)
+            logger.info(f"Removed existing output dir: {path}")
+        except Exception as e:
+            raise RuntimeError(f"Cannot remove {path} — aborting to prevent duplicate data: {e}") from e
 
 
 def get_spark_session() -> SparkSession:
@@ -40,6 +36,8 @@ def get_spark_session() -> SparkSession:
     return (
         SparkSession.builder
         .appName(SPARK_APP_NAME)
+        .config("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version", "2")
+        .config("spark.hadoop.fs.permissions.umask-mode", "000")
         .getOrCreate()
     )
 
@@ -120,10 +118,11 @@ def combine_sources(spark: SparkSession) -> None:
     )
 
     # Write to usage layer
-    output_path = USAGE_PATH / "stock_analysis"
-    output_path.mkdir(parents=True, exist_ok=True)
+    output_path = USAGE_PATH / "stock_analysis" / "enriched_stocks.parquet"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    safe_rmtree(output_path)
 
-    write_parquet_safe(final_df, str(output_path / "enriched_stocks.parquet"))
+    final_df.write.mode("append").parquet(str(output_path))
 
     logger.info(f"Saved {final_df.count()} enriched records to {output_path}")
 

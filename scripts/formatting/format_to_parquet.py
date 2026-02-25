@@ -5,7 +5,6 @@ Applies normalization (dates in UTC, clean column names).
 
 import sys
 import shutil
-import tempfile
 from pathlib import Path
 
 from pyspark.sql import SparkSession
@@ -24,17 +23,14 @@ from config.settings import (
 )
 
 
-def write_parquet_safe(df, output_path: str) -> None:
-    """Write Parquet via a temp dir to avoid rename issues on Windows/WSL2 bind mounts."""
-    tmp_dir = tempfile.mkdtemp(prefix="spark_out_")
-    tmp_output = str(Path(tmp_dir) / "data.parquet")
-    try:
-        df.write.mode("overwrite").parquet(tmp_output)
-        final = Path(output_path)
-        shutil.rmtree(final, ignore_errors=True)
-        shutil.copytree(tmp_output, str(final), dirs_exist_ok=True)
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+def safe_rmtree(path: Path) -> None:
+    """Delete a directory tree before writing. Raises if deletion fails to prevent duplicate data."""
+    if path.exists():
+        try:
+            shutil.rmtree(path)
+            logger.info(f"Removed existing output dir: {path}")
+        except Exception as e:
+            raise RuntimeError(f"Cannot remove {path} — aborting to prevent duplicate data: {e}") from e
 
 
 def get_spark_session() -> SparkSession:
@@ -43,6 +39,8 @@ def get_spark_session() -> SparkSession:
         SparkSession.builder
         .appName(SPARK_APP_NAME)
         .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
+        .config("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version", "2")
+        .config("spark.hadoop.fs.permissions.umask-mode", "000")
         .getOrCreate()
     )
 
@@ -77,10 +75,11 @@ def format_stocks(spark: SparkSession) -> None:
     )
 
     # Write to Parquet
-    output_path = YAHOO_FINANCE_FORMATTED / "stocks"
-    output_path.mkdir(parents=True, exist_ok=True)
+    output_path = YAHOO_FINANCE_FORMATTED / "stocks" / "stocks.parquet"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    safe_rmtree(output_path)
 
-    write_parquet_safe(df_normalized, str(output_path / "stocks.parquet"))
+    df_normalized.write.mode("append").parquet(str(output_path))
     logger.info(f"Saved stock records to {output_path}")
 
 
@@ -107,10 +106,11 @@ def format_company_info(spark: SparkSession) -> None:
         .withColumn("fetched_at_utc", to_utc_timestamp(col("fetched_at"), "UTC"))
     )
 
-    output_path = YAHOO_FINANCE_FORMATTED / "company_info"
-    output_path.mkdir(parents=True, exist_ok=True)
+    output_path = YAHOO_FINANCE_FORMATTED / "company_info" / "company_info.parquet"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    safe_rmtree(output_path)
 
-    write_parquet_safe(df_normalized, str(output_path / "company_info.parquet"))
+    df_normalized.write.mode("append").parquet(str(output_path))
     logger.info(f"Saved company records to {output_path}")
 
 
@@ -141,10 +141,11 @@ def format_news(spark: SparkSession) -> None:
     df_normalized = df_normalized.filter(col("pub_date_utc") >= "2020-01-01")
     logger.info(f"Filtered to {df_normalized.count()} news with valid dates (>= 2020)")
 
-    output_path = NEWS_FORMATTED / "financial_news"
-    output_path.mkdir(parents=True, exist_ok=True)
+    output_path = NEWS_FORMATTED / "financial_news" / "news.parquet"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    safe_rmtree(output_path)
 
-    write_parquet_safe(df_normalized, str(output_path / "news.parquet"))
+    df_normalized.write.mode("append").parquet(str(output_path))
     logger.info(f"Saved news records to {output_path}")
 
 
