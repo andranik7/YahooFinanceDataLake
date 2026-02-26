@@ -180,19 +180,36 @@ Le sentiment des 30 derniers jours est moyenné pour projeter les jours futurs. 
 | sentiment_score | float | Sentiment utilisé |
 | type | keyword | `actual` ou `forecast` |
 
-## Dashboard Kibana
+## Dashboards Kibana
 
-Visualisations importées automatiquement :
+Deux dashboards importés automatiquement au démarrage :
+
+### Dashboard principal — Cours des actions US
 
 | Visualisation | Description | Index |
 |---------------|-------------|-------|
 | Évolution des cours | Prix de clôture par symbole sur 90 jours | `stock_analysis` |
 | Tableau des actualités | News triées par date avec scores de sentiment | `stock_news` |
 | Prédictions SARIMAX | Cours réels + prédictions 30j + bandes de confiance 95% | `stock_predictions` |
-| Top/Flop du jour | Classement des symboles par variation journalière (cours, volume) | `stock_analysis` |
-| Capitalisation par secteur | Treemap de la capitalisation boursière par secteur et symbole | `stock_analysis` |
-| Sentiment moyen par symbole | Bar chart horizontal du score de sentiment moyen par action | `stock_news` |
+| Top/Flop du jour | Classement des symboles par variation journalière | `stock_analysis` |
+| Capitalisation par secteur | Treemap par secteur et symbole | `stock_analysis` |
+| Sentiment moyen par symbole | Bar chart horizontal du score moyen par action | `stock_news` |
 | Distribution des sentiments | Donut chart positif / négatif / neutre | `stock_news` |
+
+### Dashboard détaillé — Détail d'un cours
+
+Accessible par drill-down depuis le Top/Flop. Filtre interactif par symbole.
+
+| Visualisation | Description |
+|---------------|-------------|
+| Dernier close / volume | Métriques du dernier jour de marché |
+| Estimation J+1 | Prédiction SARIMAX du prix de clôture suivant |
+| Cours du titre | Historique du prix de clôture |
+| Prédiction du cours | SARIMAX avec bandes de confiance |
+| Rendement et variation | Rendement journalier et variation en % |
+| Tendance vs sentiment | Corrélation cours / score de sentiment |
+| Actualité du cours | Dernières news associées au symbole |
+| Buzz médiatique | Volume d'articles dans le temps |
 
 ### Exporter le dashboard après modifications
 
@@ -212,3 +229,9 @@ docker-compose down -v        # Stopper + supprimer les volumes (perte des donn�
 ```
 
 > Avec `-v`, les données Elasticsearch sont perdues. Les dashboards seront réimportés au redémarrage, mais les données doivent être réingérées via le DAG.
+
+## Documentation
+
+Le dossier `docs/` contient :
+- **Rapport** (`rapport.pdf`) — rapport de projet détaillé
+- **Documentation technique** (`DOCUMENTATION_TECHNIQUE.md`) — documentation technique complète (architecture, scripts, configuration, schémas ES, compatibilité cross-platform)

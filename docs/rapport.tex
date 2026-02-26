@@ -46,6 +46,7 @@
 \maketitle
 \thispagestyle{empty}
 \vfill
+\setcounter{tocdepth}{1}
 \tableofcontents
 \newpage
 
@@ -400,11 +401,6 @@ Les tâches d'ingestion s'exécutent en parallèle car elles sont indépendantes
 \caption{DAG \texttt{yahoo\_finance\_pipeline} dans l'interface Airflow}
 \end{figure}
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=\textwidth]{airflow2.png}
-\caption{Exécution réussie du pipeline complet}
-\end{figure}
 
 %% ================================================================
 \section{Visualisation Kibana}
@@ -412,53 +408,19 @@ Les tâches d'ingestion s'exécutent en parallèle car elles sont indépendantes
 
 Les dashboards Kibana sont automatiquement importés au démarrage via le script \texttt{init\_kibana.sh}, qui charge le fichier \texttt{kibana/kibana\_saved\_objects.ndjson} via l'API REST. Ce fichier est versionné dans Git, assurant la reproductibilité des visualisations.
 
-Le dashboard principal présente six visualisations :
-
-\begin{table}[H]
-\centering
-\begin{tabularx}{\textwidth}{@{}lX@{}}
-\toprule
-Visualisation & Description \\
-\midrule
-Évolution des cours & Graphique en ligne du prix de clôture par symbole sur 90 jours (\texttt{stock\_analysis}) \\
-Actualités & Tableau des dernières news avec score et label de sentiment (\texttt{stock\_news}) \\
-Prédictions SARIMAX & Cours réels + prédictions 30 jours + bandes de confiance 95\% (\texttt{stock\_predictions}) \\
-Top/Flop du jour & Tableau classant les symboles par variation journalière avec cours et volume (\texttt{stock\_analysis}) \\
-Capitalisation par secteur & Treemap montrant la répartition de la capitalisation boursière par secteur et symbole (\texttt{stock\_analysis}) \\
-Distribution des sentiments & Donut chart de la répartition positive / négative / neutre des articles (\texttt{stock\_news}) \\
-Sentiment moyen par symbole & Bar chart horizontal comparant le score de sentiment moyen des 10 actions (\texttt{stock\_news}) \\
-\bottomrule
-\end{tabularx}
-\caption{Visualisations du dashboard Kibana}
-\end{table}
+L'application comprend deux dashboards complémentaires : un dashboard principal offrant une vue d'ensemble de tous les symboles (évolution des cours, prédictions, top/flop, capitalisation par secteur, sentiment), et un dashboard détaillé accessible par drill-down permettant l'analyse approfondie d'un symbole individuel (métriques, cours, prédiction, rendement, corrélation avec le sentiment, actualités).
 
 \begin{figure}[H]
 \centering
-% \includegraphics[width=\textwidth]{topflop.png}
-\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : tableau Top/Flop classant les symboles par variation journalière}\vspace{2cm}}}
-\caption{Top/Flop du jour -- classement par variation}
+\includegraphics[width=\textwidth]{dashboard1.png}
+\caption{Dashboard principal — Seconde partie}
 \end{figure}
 
-\begin{figure}[H]
-\centering
-% \includegraphics[width=\textwidth]{treemap.png}
-\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : treemap de la capitalisation boursière par secteur et symbole}\vspace{2cm}}}
-\caption{Capitalisation boursière par secteur}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-% \includegraphics[width=\textwidth]{sentiment_bar.png}
-\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : bar chart horizontal du sentiment moyen par symbole}\vspace{2cm}}}
-\caption{Sentiment moyen par symbole}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-% \includegraphics[width=\textwidth]{sentiment_donut.png}
-\fbox{\parbox{0.9\textwidth}{\centering\vspace{2cm}\textit{Capture d'écran : donut chart de la distribution positive / négative / neutre}\vspace{2cm}}}
-\caption{Distribution des sentiments}
-\end{figure}
+\begin{figure}[H]                                                                                                  
+  \centering                                                                                                         
+  \includegraphics[width=\textwidth, height=1\textheight, keepaspectratio]{dashboard2.png}                        
+  \caption{Dashboard détaillé — Détail d'un cours}                                                                   
+\end{figure}  
 
 %% ================================================================
 \section{Volumétrie et performance}
@@ -496,5 +458,7 @@ Pipeline complet & 6 à 7 minutes \\
 Ce projet démontre la faisabilité d'un pipeline analytique de bout en bout sur des données financières, du Data Lake à la prédiction. Le croisement entre séries temporelles (SARIMAX) et traitement du langage naturel (sentiment VADER) illustre l'intérêt de combiner des approches complémentaires pour contextualiser les prédictions.
 
 L'ensemble est conteneurisé et déployable en une commande, rendant le projet reproductible sur tout environnement disposant de Docker.
+
+Un article détaillé présentant l'architecture et les choix techniques du projet a été publié sur Medium : \url{https://medium.com/@andranikhayra/building-a-financial-data-lake-with-sentiment-powered-stock-predictions-1d331b199973}
 
 \end{document}
