@@ -1,8 +1,43 @@
 # Yahoo Finance Data Lake
 
-Pipeline Big Data de bout en bout : ingestion, transformation Spark, prédiction SARIMAX avec analyse de sentiment, et visualisation Kibana.
+
+## Concept Général 
+
+
+C’est un projet de pipeline Big Data de suivi de portefeuille destinée aux investisseurs long terme.
+Il centralise les données de marché et les actualités financières pour un ensemble d’actions, afin de fournir une vision claire, structurée et contextuelle de l’évolution d’un portefeuille dans le temps.
+
+L’objectif n’est pas de battre le marché ni de réaliser du trading à court terme, mais de structurer les informations publiques dans un cadre exploratoire et interprétable, permettant à l’investisseur de mieux comprendre la trajectoire des entreprises qu’il détient.
+
+Le projet propose deux niveaux de visualisation complémentaires :
+
+ - Vue macro : un dashboard global sur le portefeuille offrant une vision synthétique de la santé et des tendances des actions détenues, avec quelques indicateurs clés, une analyse sectorielle, un aperçu des top/flop et une estimation des tendances et du sentiment moyen.
+
+ - Vue micro : un dashboard détaillé pour chaque action permettant de suivre l’évolution d’un cours spécifique, d’identifier des mouvements marquants et d’explorer les informations associées à cette journée, comme les titres de presse, le buzz médiatique, le sentiment et les prévisions.
+
+Ainsi, le projet offre à la fois une lecture d’ensemble du portefeuille et la possibilité de plonger dans le détail d’une action, pour comprendre le contexte des mouvements de marché et les informations publiques qui peuvent influencer la perception d’une entreprise.
+
+Ce Pipeline Big Data de bout en bout : ingestion, transformation Spark, prédiction SARIMAX avec analyse de sentiment, et visualisation Kibana.
 
 **Symboles suivis** : AAPL, GOOGL, MSFT, AMZN, META, TSLA, NVDA, JPM, V, WMT
+
+| Symbole | Entreprise         |
+|---------|------------------|
+| AAPL    | Apple             |
+| GOOGL   | Alphabet          |
+| MSFT    | Microsoft         |
+| AMZN    | Amazon            |
+| META    | Meta              |
+| TSLA    | Tesla             |
+| NVDA    | NVIDIA            |
+| JPM     | JPMorgan Chase    |
+| V       | Visa              |
+| WMT     | Walmart           |
+
+Ces actions ont été choisies car ce sont des grandes capitalisations US très liquides, avec une couverture médiatique importante.
+
+
+
 
 ## Architecture
 
